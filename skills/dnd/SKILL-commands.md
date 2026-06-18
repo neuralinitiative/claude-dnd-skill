@@ -119,9 +119,12 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
 3. **Read campaign ruleset** for this session: `python3 ${CLAUDE_SKILL_DIR}/scripts/paths.py campaign-ruleset <name>` (or import `campaign_ruleset` directly). Stash the result; pass `--ruleset <value>` to `lookup.py`, `build_supplemental.py`, and `combat.py` mastery calls so they route to the correct dataset. The display companion picks up the same value automatically via `push_stats.py --set-campaign`.
 
 4. Read SKILL-scripts.md (for script syntax this session)
-5. Read state.md, world.md, npcs.md (index only), and all characters/*.md
+5. **Mark this campaign active** (for the autosave hook): write `{"name": "<campaign-name>"}` to `$(python3 ${CLAUDE_SKILL_DIR}/scripts/paths.py runtime-dir)/active-campaign.json`. This is what `autosave_checkpoint.py` reads to know which campaign to checkpoint; a stale marker is harmless. Then read state.md, world.md, npcs.md (index only), and all characters/*.md
    - **state.md contains `## DM Style Notes`** — read and internalize before narrating anything. These are table-specific calibration patterns that override default DM instincts.
-   - **world.md:** Load in full — World Foundations and active Adventure Nodes both inform narration and faction moves. Do NOT read `world-seeds.md` at load (generation artifact, not live reference).
+   - **world.md:** Load in full — World Foundations, Three Truths, and factions inform narration and faction moves. Do NOT read `world-seeds.md` at load (generation artifact, not live reference).
+   - **world-nodes.md (imported campaigns only):** Do **NOT** load at session start. It holds the full Quest Seed Bank and Adventure Nodes for the whole module; read only the current act's nodes on demand when a scene needs them. If the file is absent (dynamic/sandbox, or an older import), there is nothing to lazy-load — `world.md` already carries the nodes, unchanged from prior behavior.
+   - **arc.md (imported campaigns only):** Do **NOT** load at session start. `state.md → ## Campaign Arc` already carries the current + next chapter window. Read `arc.md` only when advancing chapters or when a player asks about the broader arc. If absent, the arc lives inline in `state.md` (dynamic/sandbox) — read it there as before.
+   - **source/<chapter-id>.md (imported campaigns only):** the full module text, one file per chapter. Never loaded at session start. Before running a scene in a chapter, read that chapter's `source/<id>.md` (the `source_ref` in the arc) — and only that chapter. This is the predefined-story equivalent of reading a single NPC's full entry on demand.
    - **npcs.md:** Index row only at load. **Before writing substantive dialogue or decisions for any named NPC, read their full entry in `npcs-full.md`.** Do not wait for an explicit `/dm:dnd npc [name]` call — do it proactively when a scene centers on that character. Index rows carry surface traits only; personality axes, relationships, and hidden goals are in the full entry.
    - **Do NOT read session-log.md at load** — recent events are already in `state.md → ## Recent Events`. Only read session-log.md if the player explicitly requests a recap, or if DM Calibration from the last 1-2 sessions is needed and not already internalized.
 6. Push full party stats to display sidebar. **CRITICAL:** use `--json` with a complete player object — **never** the `--player` shorthand here. `--player` only updates existing fields; it cannot populate the card or sheet tabs. The display shows "Full sheet not loaded" when `sheet` is absent.
@@ -288,13 +291,20 @@ On confirmation:
 
 1. `mkdir -p ~/.claude/dnd/campaigns/<name>/characters`
 2. Copy templates from `${CLAUDE_SKILL_DIR}/templates/`
-3. Write **world.md**:
+3. Write **world.md** (load-time core — kept small so it can be read in full every load):
    - `## World Foundations` — setting, geography, tone, magic level, calendar if present
    - `## Three Truths` — one settlement, one threat, one mystery (drawn from source)
    - `## Threat Escalation Arc` — map source acts to the 5-stage table; set stage 1
    - `## Factions` — all factions with archetype, current activity, relationship to party
+
+3a. Write **world-nodes.md** (lazy reference — NOT read at load, pulled per current act):
    - `## Quest Seed Bank` — all explicit hooks + 2–3 implied side threads
-   - `## Adventure Nodes` — named locations with one-line descriptions
+   - `## Adventure Nodes` — named locations with one-line descriptions, grouped by act/chapter
+
+   For a small module the split is optional, but for any published adventure it is the
+   single biggest load-time saving — the whole quest/location bank no longer sits in
+   context every session. If you write `world-nodes.md`, do **not** duplicate its
+   sections into `world.md`.
 
 4. Write **npcs.md** index table (one row per NPC: name, role, location, one-line demeanor)
 
@@ -303,11 +313,19 @@ On confirmation:
    - Relationships to other NPCs (min 2 per NPC)
    - Stat block summary if present in source
 
-6. Write **state.md** from template:
+6. Write **arc.md** from `${CLAUDE_SKILL_DIR}/templates/arc.md` — the **full** act/chapter tree: every chapter's `id`, `title`, `location`, `source_ref` (its file in the lazy corpus, see step 6b), `key_beats`, `telegraph_scene`, `branching_notes`, plus `outstanding_beats` and `steering_notes`. This is the heavy structure; it lives here so it is read on demand, not at every load.
+
+6a. Write **state.md** from template:
    - Populate `## Current Situation` — starting location and party placeholder
    - Populate `## World State` — in-world date if given, factions, threat arc stage 1
-   - Populate `## Campaign Arc` — full act/chapter structure with key beats, telegraph scenes, and steering notes (see format in template)
-   - Leave `## Active Quests`, `## Session Flags`, `## DM Style Notes` as template defaults
+   - Populate `## Campaign Arc` with the **STRUCTURED ARC POINTER only** (see template): `type: structured`, `source`, `structure`, `arc_file: arc.md`, `current_act`, `current_chapter`, the `current_chapter_detail` block, `next_chapter`, `outstanding_beats`, `steering_notes`. **Delete the entire DYNAMIC ARC yaml block** from the template — do not leave both arc forms in the file. The full tree is in arc.md; state.md carries only the current + next chapter window.
+   - Leave `## Active Quests`, `## Session Flags` (autosave defaults on), `## DM Style Notes` as template defaults
+
+6b. Write the **lazy corpus** — the full source text, kept available but out of the hot path:
+   - `mkdir -p ~/.claude/dnd/campaigns/<name>/source`
+   - For each chapter in arc.md, write `source/<chapter-id>.md` (e.g. `source/1.1.md`) containing that chapter's source text from the extracted chunks. Use the same chapter ids as arc.md.
+   - Write `source-index.md` — a table mapping `chapter-id → source/<id>.md → one-line scope`, plus source title and import date.
+   - Validate the layout: `python3 ${CLAUDE_SKILL_DIR}/scripts/corpus_check.py --campaign <name>` (expects "lazy-corpus layout OK"). Fix any orphan/missing-file warnings before finishing.
 
 7. Write **session-log.md** with Session 0 import record:
    ```
@@ -344,6 +362,8 @@ Write session events to session-log.md, update state.md (location, active quests
 - **NPC dispositions:** each NPC with changed or notable standing. Format: `[Name]: [disposition] — [one-line reason]`. Remove NPCs who have returned to baseline.
 
 If nothing changed in a category this session, leave it as-is. If a fact was wrong in the previous save, correct it.
+
+**Structured (imported) campaigns — keep the arc window and arc.md in sync.** When a chapter advances this session: mark the completed chapter `status: complete` in `arc.md`, set the new chapter `status: current`, and update `state.md → ## Campaign Arc` so its `current_chapter`, `current_chapter_detail`, `next_chapter`, and `outstanding_beats` reflect the new window. The full tree stays in `arc.md`; `state.md` carries only the current + next chapter so the load stays light. If no chapter advanced, only update `outstanding_beats`/`steering_notes` inline in `state.md` — no need to touch `arc.md`. (Dynamic/sandbox campaigns have no `arc.md`; update the inline arc in `state.md` as before.)
 
 Then update `## Faction Moves` in state.md: for each active faction, answer *"what did they do while the party was occupied?"* One line per faction — even if nothing visible yet. Confirm what was written.
 
@@ -703,9 +723,9 @@ Read `state.md` → display Active Quests and Open Threads sections.
 
 ## `/dm:dnd arc [status|advance|revise|view]`
 
-Manage the dynamic campaign arc. Active only when `state.md → ## Campaign Arc` has `type: dynamic` — no-op for sandbox and structured campaigns.
+Manage the dynamic campaign arc. The `advance`/`revise`/`new` subcommands are active only when `state.md → ## Campaign Arc` has `type: dynamic` — no-op for sandbox campaigns. For **structured (imported)** campaigns, `status` and `view` read from `arc.md` (chapter advancement happens at `/dm:dnd save`, not here); `advance`/`revise`/`new` are no-ops.
 
-- **`/dm:dnd arc`** or **`/dm:dnd arc status`** — print current act, current beat label, `what_changes` for the current beat, and `steering_notes`. Quick reference, one screen.
+- **`/dm:dnd arc`** or **`/dm:dnd arc status`** — print current act, current beat label, `what_changes` for the current beat, and `steering_notes`. Quick reference, one screen. (Structured: print `current_act`, `current_chapter`, current chapter's `key_beats`, and `outstanding_beats` from `state.md`; read `arc.md` only if more detail is asked for.)
 - **`/dm:dnd arc advance [beat-id]`** — mark the named beat complete (current beat if omitted). Remove from `outstanding_beats`. Advance `current_beat` to the next pending beat. If all beats in an act are complete, advance `current_act`. Update `steering_notes` to describe how to reach the newly current beat without forcing it.
 
   **When the final beat (3b) is marked complete — arc continuation:**
@@ -826,3 +846,24 @@ The display shows a pie-clock countdown draining from full to empty over the int
 - Waiting on a player dice roll result
 - The DM just sent a message (they're driving this turn)
 - During `/dm:dnd save`, `/dm:dnd end`, or any command response
+
+---
+
+## `/dm:dnd autosave on` / `/dm:dnd autosave off`
+
+Toggle the behind-the-scenes continuity checkpoint. Writes `autosave: on|off` to `state.md → ## Session Flags`. **Default is on.** Applies to every campaign type (structured, dynamic, sandbox) — it only ever writes the same continuity anchors a normal save writes, just more often, and never changes narration.
+
+**What autosave does when on:**
+1. **In-model micro-saves** (always available, no setup): the DM silently flushes continuity at scene boundaries and on a turn cadence — see the *Continuity micro-save* rule in SKILL.md. This keeps unsaved state near zero so a context compaction costs nothing.
+2. **Deterministic Stop-hook checkpoint** (optional, opt-in): if the user has installed the hook, `autosave_checkpoint.py` snapshots `state.md` every turn and prompts a micro-save every N turns. Install once with:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/install_autosave_hook.py        # enable
+   python3 ${CLAUDE_SKILL_DIR}/scripts/install_autosave_hook.py --uninstall
+   ```
+   The hook reads this same `autosave` flag, so `/dm:dnd autosave off` silences it without uninstalling.
+
+**On:** write `autosave: on`. Confirm: *"Autosave on — I'll checkpoint continuity behind the scenes so a context compaction never loses your place."*
+
+**Off:** write `autosave: off`. Confirm: *"Autosave off — I'll only persist on /dm:dnd save and /dm:dnd end."*
+
+**Why turn-count, not a context percentage:** the model cannot see its own context-usage level, so there is no reliable "save at 80% full" trigger from inside the skill. The cadence is keyed on turns instead, tuned to fire well before auto-compaction.

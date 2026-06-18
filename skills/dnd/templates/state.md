@@ -119,23 +119,24 @@ steering_notes: >
 
 revision_log: []
 
-# --- STRUCTURED ARC (imported campaigns, populated by /dnd import) ---
+# --- STRUCTURED ARC POINTER (imported campaigns, populated by /dnd import) ---
+# Structured campaigns keep only this lightweight window inline. The full
+# act/chapter tree lives in arc.md so it stays out of the hot path at load.
+# Read arc.md only when advancing chapters or answering a broad-arc question.
 # type: structured
 # source: "<title>"
-# structure: linear   # linear | hub-and-spoke | faction-web
+# structure: linear      # linear | hub-and-spoke | faction-web
+# arc_file: arc.md
 # current_act: 1
-# current_chapter: "<chapter name>"
-# acts:
-#   - act: 1
-#     title: "<act title>"
-#     chapters:
-#       - id: "1.1"
-#         title: "<chapter name>"
-#         location: "<primary location>"
-#         key_beats: ["<beat>", "<beat>"]
-#         telegraph_scene: "<setup scene>"
-#         branching_notes: "<how player choices can vary>"
-#         status: current
+# current_chapter: "1.1"
+# current_chapter_detail:
+#   id: "1.1"
+#   title: "<chapter name>"
+#   location: "<primary location>"
+#   source_ref: "source/1.1.md"
+#   key_beats: ["<beat>", "<beat>"]
+#   telegraph_scene: "<setup scene>"
+# next_chapter: "1.2"      # so the DM can foreshadow without loading arc.md
 # outstanding_beats: ["<beat>"]
 # steering_notes: >
 #   <How to guide players toward outstanding beats without forcing.>
@@ -146,6 +147,7 @@ revision_log: []
 *(leave empty until the first arc completes)*
 
 ## Session Flags
-*(tutor_mode, autorun, autorun_interval, tts_voice, sfx_languages — session-scoped flags set via /dnd commands or by the display companion)*
+*(tutor_mode, autorun, autorun_interval, tts_voice, sfx_languages, autosave — session-scoped flags set via /dnd commands or by the display companion)*
+*(autosave: on|off — default on. Governs the behind-the-scenes continuity checkpoint (Live State Flags + graph + session tail). Toggle with /dm:dnd autosave on|off.)*
 
 ## DM Notes (hidden from players)

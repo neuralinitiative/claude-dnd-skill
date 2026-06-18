@@ -195,8 +195,11 @@ Once a campaign is loaded, stay in DM mode. Interpret all player messages as in-
   - **For a specific NPC's attitude or goals:** read only that NPC's entry in `npcs-full.md`, not the whole file.
   - **For a specific past event:** read `state.md → ## Continuity Archive` first; escalate to `session-log.md` only if the archive bullet is insufficient.
   - **For PC sheet facts:** read `characters/<PC>.md`.
+  - **For predefined-story detail (imported campaigns):** re-read the current chapter's `source/<id>.md`, never a compacted recollection of it — a flattened summary of published boxed text or a stat block is exactly the kind of detail compaction corrupts. For a broader-arc question, read `arc.md`; for a location/quest, `world-nodes.md`.
 
   The constraint: one targeted Read per claim, not a full file reload. The player's trust in world continuity depends on accuracy; the session's momentum depends on not stalling to reload everything.
+
+- **Continuity micro-save (autosave).** Unless `state.md → ## Session Flags` has `autosave: off`, keep unsaved continuity near zero so a context compaction can never cost more than a turn or two. At each natural scene boundary — a location change, the end of combat, a major NPC reveal or disposition shift — and otherwise every several turns, *silently* flush the continuity anchors: update `## Live State Flags` in `state.md`, append any new relationships to the campaign graph, and make sure recent beats are in the session tail. This is a lightweight write, **not** a full `/dm:dnd save` — do not rewrite `session-log.md`, do not narrate it, do not interrupt the scene. It is the same information a save captures, just kept current continuously instead of only at session end. If the optional autosave Stop hook is installed (`install_autosave_hook.py`), it will also prompt this flush on a turn cadence as a backstop — but do not wait for it; the scene-boundary habit is the primary mechanism.
 
 **Structured campaign arc steering** (when `state.md → ## Campaign Arc` has `type: structured`):
 
@@ -213,6 +216,8 @@ Read `## Campaign Arc` at every session load alongside `## DM Style Notes`. It c
 5. **Hub-and-spoke structure:** players may approach spoke locations in any order. Each spoke has its own chapter beats. Track which spokes are complete in `outstanding_beats`. The convergence point (final act) does not open until all required spokes are resolved unless the source explicitly allows skipping.
 
 6. **Do not reference the arc document to players.** The arc is a DM tool. Players experience it as natural story progression. Never say "you need to do X before Y" — show them why they want to.
+
+7. **Pull the chapter source on demand — never the whole book.** Imported campaigns keep the full module text as a lazy corpus: one file per chapter at `source/<chapter-id>.md` (the `source_ref` in the arc), indexed by `source-index.md`. The book is **not** loaded at `/dm:dnd load`. Before running a scene in a chapter, read that chapter's `source/<id>.md` — and only that one — the same way you read a single NPC's full entry before voicing them. When the party crosses into a new chapter, read the new chapter's file then; do not pre-load chapters ahead. The arc's `key_beats` and `telegraph_scene` tell you *what* must happen; the chapter source gives you the room descriptions, stat blocks, boxed text, and detail to run it faithfully. Likewise pull location/quest detail from `world-nodes.md` per current act rather than holding the whole module's nodes in context.
 
 **Dynamic campaign arc steering** (when `state.md → ## Campaign Arc` has `type: dynamic`):
 
