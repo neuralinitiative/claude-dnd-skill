@@ -423,3 +423,43 @@ Open the browser tab and Chromecast it *before* running `/dm:dnd load` so the br
 **Scene detection:** server scans narration for keywords and shifts background gradient + particle type (17 scenes: tavern, dungeon, forest, crypt, arcane, ocean, etc.). Crossfades over ~2.5 s.
 
 **Audio (Python-side):** `audio.py` auto-imported by `dnd-display-app.py`. Two toggles: Ambient (looping soundscape) and Effects (one-shot SFX). Both default off. Scene changes crossfade the ambient loop. All synthesis via numpy — no audio files needed.
+
+---
+
+## Continuity Autosave — `scripts/autosave_checkpoint.py`, `scripts/install_autosave_hook.py`
+
+Behind-the-scenes continuity checkpoint for long sessions, so a context compaction never loses the player's place. Two layers; see the *Continuity micro-save* rule in SKILL.md and the `/dm:dnd autosave` command.
+
+```bash
+# Opt-in: register the Stop hook (writes ~/.claude/settings.json, idempotent)
+python3 ${CLAUDE_SKILL_DIR}/scripts/install_autosave_hook.py
+python3 ${CLAUDE_SKILL_DIR}/scripts/install_autosave_hook.py --uninstall
+python3 ${CLAUDE_SKILL_DIR}/scripts/install_autosave_hook.py --status
+
+# The hook target (also runnable by hand to force a snapshot or inspect state)
+python3 ${CLAUDE_SKILL_DIR}/scripts/autosave_checkpoint.py --status
+python3 ${CLAUDE_SKILL_DIR}/scripts/autosave_checkpoint.py --campaign <name> --snapshot-only
+```
+
+`autosave_checkpoint.py` runs as a Claude Code **Stop hook** (after each turn). It reads the active campaign from `<runtime-dir>/active-campaign.json` (written at `/dm:dnd load`) and the `autosave` flag from that campaign's `state.md`. It **no-ops** when no campaign is active (e.g. a non-D&D session), when `autosave: off`, or when already inside a hook-driven continuation. Every turn it snapshots `state.md` to the runtime dir; every N turns (default 10, `DND_AUTOSAVE_EVERY` to override) it emits a Stop-hook `block` decision that prompts the DM to flush continuity before yielding. The hook is **opt-in** — the in-model micro-save cadence works without it.
+
+**When to use:** offer `install_autosave_hook.py` to players running long imported modules who hit compaction mid-session. The flag toggle (`/dm:dnd autosave on|off`) is the in-session control.
+
+## Lazy Corpus — `scripts/corpus_check.py`
+
+Imported (structured) campaigns keep the full module text as a lazily-loaded reference layer instead of inlining it. Layout:
+
+```
+<campaign>/
+  world.md           # load-time core (Foundations, Three Truths, factions)
+  world-nodes.md     # lazy: full Quest Seed Bank + Adventure Nodes (per-act read)
+  arc.md             # lazy: full act/chapter tree (state.md holds current+next only)
+  source-index.md    # chapter-id -> source file -> one-line scope
+  source/<id>.md     # lazy: one file per chapter, the module's source text
+```
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/corpus_check.py --campaign <name>
+```
+
+Validates that every chapter id in `source-index.md` has a matching `source/<id>.md` (and vice-versa) and that `arc.md` exists. Run it at the end of `/dm:dnd import`. A campaign with no `source/` layer (dynamic, sandbox, or a pre-v2.2.0 import) is reported as a clean no-op — nothing to validate, and its load path is unchanged.

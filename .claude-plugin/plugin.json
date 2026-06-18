@@ -1,6 +1,6 @@
 {
   "name": "dm",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "description": "Dungeon Master assistant for running persistent D&D 5e campaigns. Campaign creation/loading, character management, combat tracking, NPC generation, dice rolling, an optional live display companion, and full session state — all persisted across sessions. Provides the `dnd` skill; invoke as /dm:dnd, or just describe what you want once a campaign is loaded.",
   "author": {
     "name": "Neural Initiative",
