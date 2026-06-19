@@ -109,6 +109,7 @@ The Flask server receives narration text, player actions, dice results, and char
 - [Claude Code](https://claude.ai/code) CLI installed
 - Python 3.10+
 - `pip3 install flask flask-cors numpy cryptography` (display companion; numpy required for sound effects, cryptography for LAN TLS)
+- `pip3 install pymupdf` (campaign import from PDF — column-aware extraction so multi-column modules segment into chapters correctly; falls back to poppler's `pdftotext` if absent)
 
 ---
 

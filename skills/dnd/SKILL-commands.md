@@ -243,6 +243,8 @@ Import a pre-written campaign from a source file (PDF, MD, TXT, DOCX) and create
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>" --info
 ```
+**PDF sources:** extraction uses PyMuPDF (column-aware) so multi-column modules de-column into reading order and segment into chapters correctly — without it, two-column books collapse into one chapter. If the script prints a `pip3 install pymupdf` notice on its stderr, tell the DM to install it and re-run; it falls back to `pdftotext` otherwise but segmentation is less reliable.
+
 Print file info. If word count is over 4000, chunk the source:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>" --chunks  # total chunks
