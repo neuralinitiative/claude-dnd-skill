@@ -24,6 +24,11 @@
 # Dev-only render screenshots from the redesign work
 design-mockups/renders/
 
+# Local-only demo/gif tooling (kept out of the repo)
+demo_server.py
+make_demo.py
+demo.gif
+
 # SRD data runtime cache (individual pulled files) — not committed
 data/*.json.bak
 data/*.tmp
