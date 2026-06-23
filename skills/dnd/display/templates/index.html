@@ -6801,6 +6801,8 @@ async function _stageAction() {
   localStorage.setItem('dnd_staged_input', JSON.stringify({ char: _selectedChar, text, ts: Date.now() }));
 
   let attempts = 0;
+  let _sent = false;
+  let _lastStatus = 0;
   while (attempts < 3) {
     attempts++;
     try {
@@ -6809,6 +6811,7 @@ async function _stageAction() {
         headers: _authHeaders(),
         body: JSON.stringify({ character: _selectedChar, text }),
       });
+      _lastStatus = res.status;
       if (res.status === 202) {
         // Device pending approval — persist state so it survives page reload
         localStorage.setItem('dnd_awaiting_approval', _deviceId);
@@ -6822,6 +6825,7 @@ async function _stageAction() {
         _inputText.value = '';
         _toggleReady(_selectedChar);   // one-tap: staging immediately sends to the DM
         _setPhoneStatus('sent');
+        _sent = true;
         break;
       }
       // Non-retriable error (403, 400, etc.)
@@ -6834,7 +6838,16 @@ async function _stageAction() {
     }
   }
   _stageBtn.disabled = false;
-  _stageBtn.textContent = 'Stage';
+  if (_sent) {
+    _stageBtn.textContent = 'Stage';
+  } else {
+    // Honest failure: the text + the dnd_staged_input cache are preserved, so a
+    // tap re-sends without retyping. Never silently reset to 'Stage' on failure —
+    // that's what read as "submitted but not acknowledged, gone forever".
+    _stageBtn.textContent = _lastStatus
+      ? `Send failed (${_lastStatus}) — tap to retry`
+      : 'Send failed — tap to retry';
+  }
 }
 
 // ── Toggle ready for a staged char ───────────────────────────────
@@ -6880,6 +6893,34 @@ _inputText.addEventListener('keydown', e => {
     _stageAction();
   }
 });
+
+// ── Keep the reading column clear of the fixed PARTY INPUT panel ──────
+// #input-panel is position:fixed at the bottom; when it expands (or the
+// editorial drawer slides open, or the mobile keyboard raises the viewport)
+// it overlaps the last lines of narration. Reserve #text-scroll bottom padding
+// equal to the panel's live on-screen footprint so the text always clears it.
+function _reserveInputSpace() {
+  const panel  = document.getElementById('input-panel');
+  const scroll = document.getElementById('text-scroll');
+  if (!panel || !scroll) return;
+  // Phone input-only mode: #text-scroll isn't the reading surface there.
+  if (document.body.classList.contains('input-only')) { scroll.style.paddingBottom = ''; return; }
+  // Panel hidden (display:none → 0 rect) or fully below the fold (closed drawer) → CSS baseline stands.
+  // NB: don't use offsetParent for visibility here — it is always null for position:fixed elements.
+  const rect = panel.getBoundingClientRect();
+  if (rect.height === 0 || rect.top >= window.innerHeight) { scroll.style.paddingBottom = ''; return; }
+  const reserve = Math.round(window.innerHeight - rect.top) + 16;
+  scroll.style.paddingBottom = Math.max(40, reserve) + 'px';
+}
+
+(function _initReserveInputSpace() {
+  const panel = document.getElementById('input-panel');
+  if (window.ResizeObserver && panel) new ResizeObserver(_reserveInputSpace).observe(panel);
+  if (panel) panel.addEventListener('transitionend', _reserveInputSpace); // drawer slide / collapse
+  window.addEventListener('resize', _reserveInputSpace);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', _reserveInputSpace);
+  _reserveInputSpace();
+})();
 
 // Initialise with no extra chars (populated when stats arrive)
 _buildCharTabs([]);

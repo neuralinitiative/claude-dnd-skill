@@ -10,6 +10,11 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-06-22 — Display input fixes — reading column clears PARTY INPUT, honest send-failure
+
+- **Display: the PARTY INPUT box no longer covers the bottom of the narration.** The fixed input panel grows when it expands (or the editorial drawer opens, or the mobile keyboard raises the viewport). The reading column now reserves bottom space equal to the panel's live on-screen footprint via a `ResizeObserver`, so the last lines of narration always clear it.
+- **Display: a failed player-input submit now says so.** If the browser→server POST fails after retries, the Stage button shows "Send failed — tap to retry" (the typed text and its `localStorage` cache are preserved, so a tap re-sends) instead of silently resetting to "Stage" — which previously read as "submitted but not acknowledged."
+
 ## [2.2.1] — 2026-06-18 — Multi-column PDF import (chapter segmentation fix)
 
 - **Imported PDFs no longer collapse into one chapter.** Most published modules are two-column, and the extractor used `pdftotext -layout`, which preserves physical layout and **interleaves the columns** — scrambling reading order (keyed encounters came out 1, 2, 4, 3…) and burying section headers mid-line. Handed that, the import had nothing clean to segment on and lumped the whole book into a single chapter. PDF extraction now uses **PyMuPDF column-aware ordering**: text blocks are sorted into true reading order (left column then right, with full-width headers acting as band dividers), so section headers and keyed encounters come out clean and in sequence and chapter segmentation works on large modules. Verified on an 82-page, 38k-word anthology that previously collapsed.
