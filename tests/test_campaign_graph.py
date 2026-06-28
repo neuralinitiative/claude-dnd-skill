@@ -236,6 +236,34 @@ class GraphSubcommandTests(unittest.TestCase):
         self.assertEqual(edges[0]["type"], "met")
 
 
+    # ── extract --deterministic --apply (one-shot, idempotent) ────────────
+
+    def test_extract_deterministic_apply_is_idempotent(self):
+        # A session log with a clean SVO sentence the verb table should catch.
+        (self.camp_dir / "session-log.md").write_text(
+            "## Session 1\n\nAldric betrayed Mira at the gate.\n"
+        )
+        rc, out, err = _run(
+            ["extract", "--campaign", self.campaign,
+             "--deterministic", "--apply", "--min-confidence", "low"],
+            env_overrides=self.env
+        )
+        self.assertEqual(rc, 0, msg=err)
+        edges_first = self._graph_json()["edges"]
+        self.assertGreater(len(edges_first), 0,
+                           f"apply produced no edges; out={out} err={err}")
+
+        # Re-run: dedup must make it a no-op (no duplicate edges).
+        rc2, out2, err2 = _run(
+            ["extract", "--campaign", self.campaign,
+             "--deterministic", "--apply", "--min-confidence", "low"],
+            env_overrides=self.env
+        )
+        self.assertEqual(rc2, 0, msg=err2)
+        edges_second = self._graph_json()["edges"]
+        self.assertEqual(len(edges_first), len(edges_second),
+                         "second apply must be idempotent (no new edges)")
+
     # ── supersede-edge (Phase 2.5) ──────────────────────────────────────────
 
     def test_supersede_edge_marks_edge_and_excludes_from_active(self):

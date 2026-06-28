@@ -13,7 +13,7 @@
       "name": "dm",
       "source": "./",
       "description": "Dungeon Master assistant for persistent D&D 5e campaigns — campaign/character management, combat, NPCs, dice, an optional live display companion, and full session state across sessions.",
-      "version": "2.2.2",
+      "version": "2.3.0",
       "license": "AGPL-3.0-or-later",
       "keywords": ["dnd", "dungeons-and-dragons", "ttrpg", "5e", "dungeon-master", "game"]
     }

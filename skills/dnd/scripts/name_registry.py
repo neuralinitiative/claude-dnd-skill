@@ -359,8 +359,8 @@ def _scan_prose(camp_dir: pathlib.Path,
     Filtering layers (each cuts another category of false positives):
       - exact match against _PROSE_STOP_PHRASES
       - first word in _PROSE_STOP_FIRST_WORDS (sentence starts, structural)
-      - first word matches a canonical PC's first name (catches "Ben
-        Healing", "Kat Stealth" — skill-check patterns, not NPCs)
+      - first word matches a canonical PC's first name (catches "Theo
+        Healing", "Mara Stealth" — skill-check patterns, not NPCs)
       - second word is a known D&D mechanic / spell / skill word
         (Healing, Insight, Stealth, Persuasion, Medicine, Wild, Detect,
         Fog, Speak, Shape, Word, Cure, Mass, etc.)
@@ -394,7 +394,7 @@ def _scan_prose(camp_dir: pathlib.Path,
 
 
 # D&D mechanic words that appear capitalized but aren't NPC name parts.
-# Used to filter out "Ben Healing Word", "Kat Stealth", "Ben Medicine 25" etc.
+# Used to filter out "Theo Healing Word", "Mara Stealth", "Theo Medicine 25" etc.
 _DND_MECHANIC_WORDS = {
     "Healing", "Cure", "Detect", "Speak", "Wild", "Fog", "Mass", "Word",
     "Bless", "Bane", "Shield", "Hold", "Charm", "Sleep", "Sacred",

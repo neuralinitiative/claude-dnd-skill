@@ -4923,7 +4923,7 @@ function renderXpBlock(xpData) {
   block.className = 'xp-block';
   const line = document.createElement('div');
   line.className = 'xp-line';
-  // names line: "Kat, Ben — +250 XP"
+  // names line: "Mara, Theo — +250 XP"
   const names = (xpData.names || []).join(', ');
   const amt   = xpData.xp != null ? `+${xpData.xp} XP` : '';
   line.textContent = [names, amt].filter(Boolean).join(' — ');

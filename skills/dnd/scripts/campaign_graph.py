@@ -455,7 +455,7 @@ Output ONLY a JSON array (no prose, no preamble). Each element is an edge object
 Rules:
 - Use exact entity names as they appear in the text (e.g. "Captain Voss", "Northwall Compact", "The Wharf").
 - One edge per discrete fact. Don't compound.
-- Capture relational SHIFTS or STRUCTURAL relationships only — not generic ambient action ("Ben walked into the room").
+- Capture relational SHIFTS or STRUCTURAL relationships only — not generic ambient action ("Theo walked into the room").
 - The `anchor` MUST be a verbatim phrase (or near-verbatim) copied from the source text — short enough to grep for, long enough to be unique.
 - Skip self-edges, hypotheticals, hearsay-only claims, DM-meta commentary marked "(DM-side)" or "DM Calibration".
 - Common edge types: met, knows, fears, owes, opposes, allied_with, member_of, lives_in, based_at, holds, controls, watches, hunts, referred, introduced_to, committed_to, flagged_offlimits, has_history_with, originates_from, advances_thread, blocks_thread.
@@ -499,6 +499,73 @@ def _existing_edge_match(data: dict, frm_id: str, to_id: str, etype: str) -> boo
     return False
 
 
+_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _apply_proposal(data: dict, p: dict, no_auto_nodes: bool = False) -> "tuple[bool, int, str]":
+    """Apply a single edge proposal to the in-memory graph `data`.
+
+    Resolves or auto-creates the from/to nodes, dedupes against existing edges,
+    and appends a new edge in campaign_graph.py's exact edge schema. Idempotent:
+    a proposal whose edge already exists is a no-op.
+
+    Returns (applied, nodes_created, message). `applied` is False when the edge
+    was skipped (already present, or a node was missing under --no-auto-nodes).
+    """
+    nodes_created = 0
+
+    def resolve_or_create(name: str, is_category: bool = False) -> str:
+        nonlocal nodes_created
+        existing_id = _resolve_node(data, name)
+        if existing_id:
+            return existing_id
+        if is_category:
+            new_id = f"cat_{_slug(name)}"
+            data.setdefault("nodes", []).append({
+                "id": new_id, "type": "category", "name": name,
+                "tags": [], "summary": "",
+                "category_node": True,
+                "_auto_created_from_extract": True,
+            })
+            nodes_created += 1
+            return new_id
+        if no_auto_nodes:
+            raise ValueError(f"node not found and --no-auto-nodes set: {name!r}")
+        new_id = f"npc_{_slug(name)}"
+        data.setdefault("nodes", []).append({
+            "id": new_id, "type": "npc", "name": name, "tags": [], "summary": "",
+            "_auto_created_from_extract": True,
+        })
+        nodes_created += 1
+        return new_id
+
+    frm_name = p.get("from", "")
+    to_name = p.get("to", "")
+    etype = p.get("type", "")
+    try:
+        frm_id = resolve_or_create(frm_name, is_category=bool(p.get("category_from")))
+        to_id = resolve_or_create(to_name, is_category=bool(p.get("category_to")))
+    except ValueError as e:
+        return False, nodes_created, str(e)
+
+    if _existing_edge_match(data, frm_id, to_id, etype):
+        return False, nodes_created, "already in graph"
+
+    edge = {
+        "id": _next_edge_id(data["edges"]),
+        "from": frm_id,
+        "to": to_id,
+        "type": etype,
+        "since_session": p.get("since_session"),
+        "until_session": None,
+        "note": p.get("note") or "",
+    }
+    if p.get("source"):
+        edge["source"] = p["source"]
+    data["edges"].append(edge)
+    return True, nodes_created, f"{edge['id']}  {frm_id} --[{etype}]--> {to_id}"
+
+
 def cmd_extract(args) -> int:
     import subprocess
     campaign_dir = find_campaign(args.campaign)
@@ -510,6 +577,31 @@ def cmd_extract(args) -> int:
             campaign_dir,
             last_session_only=getattr(args, "last_session_only", False),
         )
+
+        # One-shot auto-apply: filter to proposals at/above --min-confidence and
+        # write them straight into graph.json, deduped + idempotent.
+        if getattr(args, "apply", False):
+            min_rank = _CONFIDENCE_RANK.get(getattr(args, "min_confidence", "high"), 2)
+            data = _load(args.campaign)
+            applied_edges = applied_nodes = skipped = below = 0
+            for p in proposals:
+                rank = _CONFIDENCE_RANK.get(p.get("confidence", "medium"), 1)
+                if rank < min_rank:
+                    below += 1
+                    continue
+                ok, made, msg = _apply_proposal(data, p,
+                                                no_auto_nodes=getattr(args, "no_auto_nodes", False))
+                applied_nodes += made
+                if ok:
+                    applied_edges += 1
+                    print(f"  applied {msg}")
+                else:
+                    skipped += 1
+            _save(args.campaign, data)
+            print(f"# done: +{applied_nodes} nodes, +{applied_edges} edges, "
+                  f"{skipped} already present, {below} below {getattr(args,'min_confidence','high')}-confidence")
+            return 0
+
         out_json = json.dumps(proposals, indent=2, ensure_ascii=False)
         print(f"# Deterministic extraction — {len(proposals)} proposals from "
               f"{campaign_dir.name}", file=sys.stderr)
@@ -653,67 +745,15 @@ def cmd_extract_apply(args) -> int:
             if decision == "n":
                 review_skipped += 1
                 continue
-        frm_name = p.get("from", "")
-        to_name = p.get("to", "")
-        etype = p.get("type", "")
-        since = p.get("since_session")
-        note = p.get("note") or ""
-        source = p.get("source") or {}
-
-        # Resolve or create from/to nodes. Default node type = npc unless name matches an existing one.
-        def resolve_or_create(name: str, is_category: bool = False) -> str:
-            existing_id = _resolve_node(data, name)
-            if existing_id:
-                return existing_id
-            if is_category:
-                # Category nodes are auto-created with a distinct id prefix and flag
-                new_id = f"cat_{_slug(name)}"
-                data.setdefault("nodes", []).append({
-                    "id": new_id, "type": "category", "name": name,
-                    "tags": [], "summary": "",
-                    "category_node": True,
-                    "_auto_created_from_extract": True,
-                })
-                nonlocal applied_nodes
-                applied_nodes += 1
-                return new_id
-            # No existing node — auto-create as a placeholder npc unless --no-auto-nodes
-            if args.no_auto_nodes:
-                raise ValueError(f"node not found and --no-auto-nodes set: {name!r}")
-            new_id = f"npc_{_slug(name)}"
-            data.setdefault("nodes", []).append({
-                "id": new_id, "type": "npc", "name": name, "tags": [], "summary": "",
-                "_auto_created_from_extract": True,
-            })
-            applied_nodes += 1
-            return new_id
-
-        try:
-            frm_id = resolve_or_create(frm_name, is_category=bool(p.get("category_from")))
-            to_id = resolve_or_create(to_name, is_category=bool(p.get("category_to")))
-        except ValueError as e:
-            print(f"  skip {i}: {e}", file=sys.stderr)
+        ok, made, msg = _apply_proposal(data, p, no_auto_nodes=args.no_auto_nodes)
+        applied_nodes += made
+        if ok:
+            applied_edges += 1
+            print(f"  applied {msg}")
+        else:
+            if msg != "already in graph":
+                print(f"  skip {i}: {msg}", file=sys.stderr)
             skipped += 1
-            continue
-
-        if _existing_edge_match(data, frm_id, to_id, etype):
-            skipped += 1
-            continue
-
-        edge = {
-            "id": _next_edge_id(data["edges"]),
-            "from": frm_id,
-            "to": to_id,
-            "type": etype,
-            "since_session": since,
-            "until_session": None,
-            "note": note,
-        }
-        if source:
-            edge["source"] = source
-        data["edges"].append(edge)
-        applied_edges += 1
-        print(f"  applied {edge['id']}  {frm_id} --[{etype}]--> {to_id} (s{since}+)")
 
     _save(args.campaign, data)
     msg = f"# done: +{applied_nodes} nodes, +{applied_edges} edges, {skipped} skipped"
@@ -807,6 +847,15 @@ def main() -> int:
         help="use the verb-table seed to pattern-match (no LLM, ~50%% recall, ~95%% precision)")
     sp.add_argument("--last-session-only", action="store_true",
         help="only scan the last session block of session-log.md (skip the archive)")
+    sp.add_argument("--apply", action="store_true",
+        help="(deterministic mode) auto-apply proposals at/above --min-confidence "
+             "straight into graph.json, deduped + idempotent — no review file")
+    sp.add_argument("--min-confidence", choices=["low", "medium", "high"],
+        default="high",
+        help="(with --apply) lowest confidence tier to auto-apply (default: high)")
+    sp.add_argument("--no-auto-nodes", action="store_true",
+        help="(with --apply) skip edges referencing unknown nodes instead of "
+             "auto-creating npc placeholders")
     sp.set_defaults(func=cmd_extract)
 
     sp = sub.add_parser("extract-apply",

@@ -1,6 +1,6 @@
 ---
 name: dnd
-description: "v2.2.2 · Dungeon Master assistant for running persistent D&D 5e campaigns. Handles campaign creation/loading, character management, combat tracking, NPC generation, dice rolling, and session state — all persisted across sessions. Invoke with /dm:dnd followed by a subcommand, or just speak naturally once a campaign is loaded."
+description: "v2.3.0 · Dungeon Master assistant for running persistent D&D 5e campaigns. Handles campaign creation/loading, character management, combat tracking, NPC generation, dice rolling, and session state — all persisted across sessions. Invoke with /dm:dnd followed by a subcommand, or just speak naturally once a campaign is loaded."
 tools: Read, Write, Edit, Glob, Bash, AskUserQuestion
 ---
 
@@ -122,6 +122,9 @@ Between sessions, active factions and NPCs don't stand still waiting to be found
 
 ### 12. Reward Bold Play
 Players who take creative risks, commit hard to a roleplay choice, or do something surprising that makes the scene better deserve a signal that this is the right way to play. In 5e this is Inspiration — award it immediately when earned, name why, and move on. Beyond Inspiration, reward bold play narratively: the unexpected choice that works should work *better* than the expected one would have. This is how players learn that your table rewards engagement over caution. A table that rewards engagement doesn't drift.
+
+### 13. Open Each Scene With a Bang
+A "bang" is a hard question that forces an immediate choice. When you open a new scene, do **not** default to "what do you do?" — that is dead air. Drop the player into a moment that already demands action: an NPC names a price they have to accept or refuse right now; they turn a corner into someone they wronged last session, who sees them first; a door slams shut behind them and there are footsteps, two sets, both the wrong shape; the thing they came for is in front of them — and someone else is already taking it. Bangs are wedges, not foreshadowing or scene-setting. The first beat of every new scene should make the player feel they cannot afford to hesitate. This only applies on scene *transitions* — a chapter break, a new location, a time skip, the first beat after a rest. Continuation scenes mid-flow do not need a bang every time; forcing one there just churns the pace. The faction moves you logged under Standard 11 are your best raw material — a bang is often just a faction move arriving at the worst possible moment.
 
 ---
 

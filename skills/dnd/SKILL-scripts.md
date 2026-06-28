@@ -358,6 +358,81 @@ Default files searched: state, log, archive, world, npcs
 
 ---
 
+## Session Recap — `scripts/session_recap.py`
+
+Deterministic state-diff between two character snapshots. Computes the mechanical change set (HP/temp/level/hit dice/death saves/conditions/concentration/exhaustion/inspiration/spell slots) from data so narration never recomputes it — recaps are the single thing an LLM is most likely to hallucinate. Reads `<campaign>/characters/*.md` and merges live `tracker.json` conditions/concentration. Zero LLM calls.
+
+```bash
+CAMP=my-campaign
+
+# Snapshot the party now — sets the baseline (writes to <campaign>/.recap/,
+# rolling last → prev). Run this at session START (e.g. /dm:dnd load) so there
+# is a baseline to diff against later.
+python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py snapshot --campaign $CAMP
+
+# Diff the baseline against current state → one-paragraph summary, then ADVANCE
+# the baseline to "now" so the next diff chains from here. Run at /dm:dnd save
+# (end of session) for a since-start recap, or each turn for a since-last-turn
+# recap — either way it advances, so consecutive diffs never re-report old deltas.
+python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py diff --campaign $CAMP
+# → "Aldric: took 18 damage (30→12 HP); gained Poisoned; spent 2 level 1 slots."
+
+# Same comparison without moving the baseline (ad-hoc "what changed so far?"):
+python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py diff --campaign $CAMP --no-roll
+
+# Structured change list instead of prose:
+python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py diff --campaign $CAMP --json
+
+# Diff two snapshot files directly (no campaign lookup):
+python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py diff-files before.json after.json
+```
+
+---
+
+## Oracle — `scripts/oracle.py`
+
+Dice-driven solo/improv oracles (Mythic chaos factor, Ironsworn yes/no, Random Event Focus, scene-meaning word pairs). Keeps pacing transparent and rollable instead of invented. Rolls are stdlib-random and seedable (`--seed N`). The chaos factor persists in `state.md → ## Session Flags` as `chaos_factor: N`. Zero LLM calls.
+
+```bash
+CAMP=my-campaign
+
+# Chaos factor (1-9): show / set / adjust (persisted to state.md)
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py chaos --campaign $CAMP
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py chaos set --campaign $CAMP --value 7
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py chaos adjust --campaign $CAMP --pc-lost
+
+# Yes/no oracle — likelihood + chaos modifier → verdict + d100
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py ask --likelihood likely --campaign $CAMP
+# → "NO-BUT  (d100=82, likelihood=likely, chaos=8)"
+
+# Random Event Focus (d100 → direction label)
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py event
+
+# Scene-meaning word pair (action / subject)
+python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py scene
+```
+
+Likelihoods: `sure-thing`, `likely`, `50/50`, `unlikely`, `no-way`. Verdict suffixes: `-and` (extreme, on doubles), `-but` (qualified, near threshold).
+
+---
+
+## Deterministic Graph Extraction — `scripts/graph_extract_deterministic.py`
+
+Zero-LLM relationship extractor. Pattern-matches session-log sentences against the bundled verb-table seed (`data/graph/verb_table_seed.yaml`) and emits typed edge proposals in the exact shape `campaign_graph.py` consumes. ~50% recall (clean subject-verb-object only), ~95% precision, no Claude API call. Usually driven through `campaign_graph.py extract --deterministic` rather than directly:
+
+```bash
+CAMP=my-campaign
+
+# Propose edges (stdout), no writes:
+python3 ${CLAUDE_SKILL_DIR}/scripts/campaign_graph.py extract --campaign $CAMP --deterministic
+
+# One-shot auto-apply high-confidence proposals into graph.json (idempotent):
+python3 ${CLAUDE_SKILL_DIR}/scripts/campaign_graph.py extract --campaign $CAMP \
+    --deterministic --apply --min-confidence high
+```
+
+---
+
 ## Data Commands — `scripts/sync_srd.py`, `scripts/build_srd.py`, and `scripts/lookup.py`
 
 Dataset is bundled at `${CLAUDE_SKILL_DIR}/data/dnd5e_srd.json`. No runtime download required.

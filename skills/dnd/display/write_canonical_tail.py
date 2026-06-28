@@ -9,7 +9,7 @@ working replay material even if the display's own persistence path failed.
 Usage:
     write_canonical_tail.py --campaign <name> --json '[
         {"text": "...", "_camp": "<name>"},
-        {"player": "Kat", "text": "Kat draws her dagger.", "_camp": "<name>"},
+        {"player": "Mara", "text": "Mara draws her dagger.", "_camp": "<name>"},
         ...
     ]'
 

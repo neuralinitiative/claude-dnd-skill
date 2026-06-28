@@ -158,7 +158,7 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
 
    For casters, add `"spells": {"cantrips":["..."],"level1":["..."]}` inside `sheet`. Omit for non-casters.
 
-   **Inspiration:** read from `state.md → ## Current Situation → Party status`. Set `"inspiration": 1` (or `true`) if the character has it, `0` if not. Inspiration is NOT reset by a long rest — it persists until spent. Must be explicitly tracked in the party status line at `/dm:dnd save` (e.g., `Kat: Inspiration ✓`) and loaded at `/dm:dnd load`. Use `push_stats.py --player <name> --inspiration true/false` for mid-session updates.
+   **Inspiration:** read from `state.md → ## Current Situation → Party status`. Set `"inspiration": 1` (or `true`) if the character has it, `0` if not. Inspiration is NOT reset by a long rest — it persists until spent. Must be explicitly tracked in the party status line at `/dm:dnd save` (e.g., `Mara: Inspiration ✓`) and loaded at `/dm:dnd load`. Use `push_stats.py --player <name> --inspiration true/false` for mid-session updates.
 
    `--replace-players` clears stale characters from previous campaigns. Build the JSON from the character file — every field above is required for the card and sheet tabs to render correctly.
 
@@ -356,7 +356,7 @@ Campaign "<name>" created from <source title>.
 ## `/dm:dnd save`
 Write session events to session-log.md, update state.md (location, active quests, party HP/resources, recent events), update any characters/*.md that changed. Mirror each updated character to global roster (`~/.claude/dnd/characters/<name>.md`).
 
-**Inspiration tracking:** On every save, record each PC's Inspiration state in `state.md → ## Current Situation → Party status`. Use explicit text: `Inspiration ✓` if held, omit or `No Inspiration` if not. Inspiration persists across sessions and is NOT cleared by long rests. Example: `Kat: HP 24/24. Inspiration ✓. Ben: HP 24/24.`
+**Inspiration tracking:** On every save, record each PC's Inspiration state in `state.md → ## Current Situation → Party status`. Use explicit text: `Inspiration ✓` if held, omit or `No Inspiration` if not. Inspiration persists across sessions and is NOT cleared by long rests. Example: `Mara: HP 24/24. Inspiration ✓. Theo: HP 24/24.`
 
 **Update `## Live State Flags` in state.md on every save.** This section is the compaction-resistant anchor — it holds facts that prose summaries flatten. After each session, review and update:
 - **Cover:** each PC's active cover, its status (INTACT / BLOWN / PARTIAL), and the one-line reason. Remove covers that are no longer active.
@@ -399,7 +399,7 @@ session-log.md keeps only the **2 most recent full session entries**. Older entr
 **Keep** in archive bullets:
 - Mechanical changes (XP awarded, level-ups, items gained/spent, slots burned, HP deltas at session end)
 - Plot beats (arc beat completions, "Beat 2a sealed", "Beat 2b LANDED")
-- Atmospheric / decision moments that have no graph edge ("Mira ate the bread — first food in 800 years", "Kat squeezed her hand")
+- Atmospheric / decision moments that have no graph edge ("Mira ate the bread — first food in 800 years", "Mara squeezed her hand")
 - Disclosed content (the WHAT was learned — "fragment / anchor / host", "three acceleration factors") even when the relational fact is in graph
 - Off-screen world events / faction moves
 - Calibration / DM Notes
@@ -638,7 +638,7 @@ Maps to: `python3 ${CLAUDE_SKILL_DIR}/scripts/name_registry.py <subcommand> [arg
 
 - `/dm:dnd registry rebuild [--include-prose]` — scan every campaign's `npcs.md`, `npcs-full.md`, `characters/*.md`, and `graph.json` (node names); rebuild the registry from canonical sources. Preserves any existing `retired_from` history. Run once on install, then ad hoc when desired.
 
-  **`--include-prose` (added 2026-05-07, opt-in):** also scan `session-log.md` and `session-log-archive.md` for capitalized 2–3-word sequences (likely-name patterns). Filtered against a stopword list (places, factions, mechanic words like "Ben Stealth", sentence starts) but **regex-based extraction is inherently noisy** — typically 5–15× more entries than canonical, with maybe 10–20% real catches. Tagged `source: prose` to distinguish; query with `/dm:dnd registry list --source prose` to manually review and prune. For high-quality prose extraction, the future move is LLM-backed (similar to `/dm:dnd graph extract`).
+  **`--include-prose` (added 2026-05-07, opt-in):** also scan `session-log.md` and `session-log-archive.md` for capitalized 2–3-word sequences (likely-name patterns). Filtered against a stopword list (places, factions, mechanic words like "Theo Stealth", sentence starts) but **regex-based extraction is inherently noisy** — typically 5–15× more entries than canonical, with maybe 10–20% real catches. Tagged `source: prose` to distinguish; query with `/dm:dnd registry list --source prose` to manually review and prune. For high-quality prose extraction, the future move is LLM-backed (similar to `/dm:dnd graph extract`).
 
 - `/dm:dnd registry list [--campaign C] [--type npc|pc] [--source canonical|prose]` — print all registry entries; filter by campaign-currently-active, type, or source.
 - `/dm:dnd registry lookup <name>` — case-insensitive lookup; prints the full entry as JSON.
@@ -803,8 +803,14 @@ Lower-level traversal — same as `scene-context` but with arbitrary seed nodes.
 ### `/dm:dnd graph extract [campaign-name] [--last-session-only]`
 Run a Haiku pass over the campaign's session-log to propose new edges with verbatim source-anchors. Outputs a proposal JSON to `~/.claude/dnd/campaigns/<name>/graph-proposals-<date>.json` for human review. Does **not** write to graph.json — that's the apply step.
 
-### `/dm:dnd graph extract-apply --proposals <file> [--pick N1,N2,...]`
-Apply previously-extracted proposals. Without `--pick`, prompts interactively. With `--pick`, applies only the listed proposal indices.
+### `/dm:dnd graph extract --deterministic [--last-session-only] [--write FILE]`
+**Zero-LLM alternative.** Pattern-matches session-log sentences against the bundled verb-table seed (`data/graph/verb_table_seed.yaml`) and emits the same proposal shape as the Haiku pass — no Claude API call, no cost, fully portable. Trades recall (~50%, clean subject-verb-object only) for precision (~95%) and determinism. Prints proposals to stdout, or writes them with `--write`.
+
+### `/dm:dnd graph extract --deterministic --apply [--min-confidence low|medium|high] [--no-auto-nodes]`
+One-shot auto-apply: run deterministic extraction and write proposals at/above `--min-confidence` (default `high`) straight into `graph.json` — deduped against existing edges and **idempotent** (re-running adds nothing new). Missing nodes are auto-created as `npc_*` placeholders unless `--no-auto-nodes` is set. Use this for a hands-off relationship sweep at `/dm:dnd save`; use the review path below when you want a human in the loop.
+
+### `/dm:dnd graph extract-apply --proposals <file> [--pick N1,N2,...] [--review]`
+Apply previously-extracted proposals (from either the Haiku or deterministic pass). Without `--pick`/`--review`, applies all. With `--pick`, applies only the listed proposal indices. With `--review`, walks proposals one at a time with y/n/q prompts.
 
 ### Suggested DM workflow
 
@@ -812,6 +818,42 @@ Apply previously-extracted proposals. Without `--pick`, prompts interactively. W
 2. **During session:** when a relationship shifts in narration, run `/dm:dnd graph add-edge` (or `close-edge`) with `--since` set to the current session number. Don't batch this — record at the moment of the narrative change so you don't forget.
 3. **Before a heavy social/political scene:** run `/dm:dnd graph scene-context --place <current-place> --present <key-NPCs>` to refresh which relationships matter right now.
 4. **At `/dm:dnd save`:** review the session log and add any edges you missed during play (the save flow runs an automatic sweep and presents proposals for approval).
+
+---
+
+## `/dm:dnd oracle <subcommand>` — solo/improv oracle tools
+
+Dice-driven oracles for improvised play — they keep pacing transparent and rollable instead of letting the DM invent every beat. All subcommands invoke `python3 ${CLAUDE_SKILL_DIR}/scripts/oracle.py <subcommand>`. Rolls are stdlib-random and seedable (`--seed N`) for reproducibility. Zero LLM calls.
+
+### `/dm:dnd oracle chaos [--campaign N]`
+Show the campaign's current **chaos factor** (Mythic-style, 1–9). 1 = the PCs are firmly in control; 9 = the world is spinning out from under them. Stored in `state.md → ## Session Flags` as `chaos_factor: N` (default 5).
+
+### `/dm:dnd oracle chaos set --campaign N --value V`
+Set the chaos factor to V (clamped 1–9) and persist it to `state.md`.
+
+### `/dm:dnd oracle chaos adjust --campaign N (--pc-won | --pc-lost)`
+Move the factor one step the standard Mythic direction: `--pc-won` (PC achieved the scene goal) → −1; `--pc-lost` (PC was reactive or failed) → +1. Adjust once per scene.
+
+### `/dm:dnd oracle ask [--likelihood L] [--campaign N | --chaos C] [--seed S]`
+Ironsworn-shaped **yes/no** oracle. Likelihood ∈ {`sure-thing`, `likely`, `50/50`, `unlikely`, `no-way`} (default `50/50`); the chaos factor (read from the campaign, or `--chaos`) shifts the odds. Returns a verdict — `yes`/`no` optionally suffixed `-and` (extreme, on doubles) or `-but` (qualified, near the threshold) — plus the d100. Use when the fiction poses a question the prep doesn't answer.
+
+### `/dm:dnd oracle event [--seed S]`
+Mythic **Random Event Focus** (d100). Returns a direction label (`new NPC`, `NPC action`, `move toward thread`, `PC negative`, etc.) — interpret it against the campaign's current threads, NPCs, and locations. Use when a scene needs an unexpected turn.
+
+### `/dm:dnd oracle scene [--seed S]`
+Two-word **scene-meaning** generator (action verb + subject noun, One Page Solo Engine). Use as a spark when narration runs dry or an event focus rolls. Interpret loosely.
+
+---
+
+## `/dm:dnd recap` — precomputed party state-diff
+
+Deterministic state-diff between two character snapshots — `python3 ${CLAUDE_SKILL_DIR}/scripts/session_recap.py`. Recaps are the #1 thing an LLM hallucinates (wrong HP, dropped facts); this computes the change set from data so narration never has to. Reads the character sheets at `~/.claude/dnd/campaigns/<name>/characters/*.md` and merges live `tracker.json` conditions/concentration. Zero LLM calls.
+
+### `/dm:dnd recap snapshot --campaign N`
+Snapshot the party's current state (HP/temp/level/hit dice/death saves/conditions/concentration/exhaustion/inspiration/spell slots) to `~/.claude/dnd/campaigns/<name>/.recap/`. Rolls the previous `last.json` to `prev.json` so the next diff has a baseline. **Take a snapshot at `/dm:dnd end`** so the next session's load can diff against it.
+
+### `/dm:dnd recap diff --campaign N [--before FILE] [--after FILE]`
+Diff the prior snapshot against the current state and print a one-paragraph plain-English summary (e.g. *"Aldric: took 18 damage (30→12 HP); gained Poisoned; spent 2 level 1 slots."*). With no `--before`, uses the stored `prev`/`last` snapshot; with no `--after`, snapshots live state on the fly. **Inject this line at `/dm:dnd load`** as the mechanical half of the recap. `--json` emits the structured change list.
 
 ---
 
