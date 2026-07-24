@@ -1170,9 +1170,17 @@ def srd_lookup():
         rec = _lookup.lookup_record(name, category=category)
         resolved_cat = (rec or {}).get("_cat", category or "")
         return jsonify({"found": True, "name": name, "category": resolved_cat, "text": text})
-    # Not found — return wikidot fallback URL so the frontend can offer a link
+    # Not found — offer near-miss "did you mean?" suggestions (typo recovery)
+    # plus the wikidot fallback URL so the frontend can still link out.
     wurl = _lookup.wikidot_url(name, category=category)
-    return jsonify({"found": False, "name": name, "wikidot_url": wurl})
+    suggestions = []
+    try:
+        for sg_name, sg_cat in _lookup.suggest(name, category=category, n=3):
+            suggestions.append({"name": sg_name, "category": sg_cat})
+    except Exception:
+        pass  # suggestion is best-effort; never fail the lookup over it
+    return jsonify({"found": False, "name": name,
+                    "wikidot_url": wurl, "suggestions": suggestions})
 
 
 @app.route("/ping")

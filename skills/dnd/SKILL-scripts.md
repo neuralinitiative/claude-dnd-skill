@@ -263,6 +263,8 @@ If `check_input.py` returns output, prepend it to the player's terminal input wh
 - Long rest → restore HP, hit dice, spell slots, second wind; push `--world-time` with updated time
 - Any rest or time advance → push `--world-time`
 
+**Keep the clock honest.** The world clock is continuity, not decoration. Narrate consistently with the time you last pushed, and advance it *deliberately* when an action costs time — a brief exchange is a few minutes, a search or a shopping trip is longer, a rest or a journey longer still. Never let the time of day drift on its own or silently reset between scenes. If the clock and the fiction ever disagree, reconcile it to the truth with a fresh `--world-time` push rather than compounding the error; setting it *backward* to the correct time is fine and undoes nothing, since timed effects run on their own round/minute/hour durations in `tracker.py`, independent of the wall clock.
+
 ---
 
 ## Tracker Script — `scripts/tracker.py`
@@ -453,10 +455,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py monster "goblin"
 python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py monster "dragon" --all   # all fuzzy matches
 
 # Programmatic (used by display companion /srd-lookup endpoint):
-from lookup import lookup, lookup_record, lookup_with_level
+from lookup import lookup, lookup_record, lookup_with_level, suggest
 lookup("fireball", category="spell")                  # → formatted string
 lookup_with_level("sneak attack", category="feature", level=3)  # → level-resolved string
+suggest("poisonned", category="condition")            # → [("Poisoned", "conditions"), ...]
 ```
+
+**Did-you-mean recovery.** A mistyped name doesn't dead-end. When a lookup misses, the CLI prints a `Did you mean: …?` line and the display's SRD modal offers tappable near-miss chips — both powered by `suggest()`, which fuzzy-matches the query against real names (`poisonned` → Poisoned, `fireballl` → Fireball, `gobblin` → Goblin). Suggestions respect the category when one is given, and search all categories otherwise. Use the suggested name rather than guessing at a spelling.
 
 **When to use:** combat (monster stat blocks before using them); spellcasting (range, components, duration, at-higher-levels); conditions (rule text before applying); loot and equipment; NPC generation (monster stat block as mechanical base). The display companion's character sheet modal handles lookups automatically during play — these CLI calls are for DM reference outside the UI.
 

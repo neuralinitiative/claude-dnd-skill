@@ -7,6 +7,10 @@
 - **Party:** <Name> — <Race> <Class> <Level> | HP X/X | AC X | <resources>
 - **Party status:**
 
+## Pinned Facts
+*Soft facts the DM always keeps — canon the table never wants forgotten. Read at every /dnd load alongside DM Style Notes and kept hot all session. Unlike Live State Flags (which track shifting state and are rewritten each save), pinned facts are stable and are only added or removed on request. Pin a promise made, a dead sibling's name, a running in-joke, a table house rule, a detail the player has said matters. Add/list/remove with `/dm:dnd pin`.*
+*(none pinned yet)*
+
 ## World State
 - **In-world date:** <Day, Month, Year — canonical source; keep in sync above>
 - **Season:** <current season>  **Weather:** <current conditions>

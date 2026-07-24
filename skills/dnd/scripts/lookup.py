@@ -22,6 +22,7 @@ Programmatic import (used by app.py):
     rec  = lookup_record("rapier", category="item")   # → dict | None
 """
 
+import difflib
 import json
 import os
 import re
@@ -478,6 +479,80 @@ def lookup_with_level(query: str, category=None, level=None, ruleset=None):
     return text
 
 
+# ─── Near-miss suggestions ("did you mean?") ──────────────────────────────────
+
+def _suggest_categories(category) -> list:
+    """Resolve a category token to the dataset keys a suggestion pass should
+    scan. `None` / unknown → all categories; the `item` pseudo-category →
+    equipment + magic_items; a concrete key → just that key."""
+    if not category:
+        return list(ALL_CATEGORIES)
+    cat = category.lower()
+    if cat in ("item", "items"):
+        return ["equipment", "magic_items"]
+    key = CATEGORY_MAP.get(cat)
+    if key is None:
+        return list(ALL_CATEGORIES)
+    return [key]
+
+
+def suggest(query: str, category=None, ruleset=None, n: int = 3, cutoff: float = 0.6):
+    """Return up to `n` near-miss name suggestions for a query that didn't match.
+
+    Powers a "did you mean?" hint when an exact/substring lookup dead-ends on a
+    typo ("poisonned" → "poisoned", "fireballl" → "fireball"). Matching is done
+    on normalized names (difflib ratio ≥ cutoff), plus a token-containment pass
+    that catches a good word buried in a longer query. Returns a list of
+    (name, category) tuples, best first, deduped by name.
+    """
+    rs = ruleset or _active_ruleset
+    _load_ruleset(rs)
+    data = _data_by_rs.get(rs, {})
+    if not data:
+        return []
+
+    q = _norm(query)
+    if not q:
+        return []
+
+    # normalized-name → (original_name, category), first writer wins
+    candidates: dict = {}
+    for ck in _suggest_categories(category):
+        for r in data.get(ck, []):
+            nm = r.get("name", "")
+            if nm:
+                candidates.setdefault(_norm(nm), (nm, ck))
+
+    keys = list(candidates.keys())
+    ranked: list = []
+    seen: set = set()
+
+    # 1) fuzzy — closest normalized names above the cutoff
+    for k in difflib.get_close_matches(q, keys, n=n * 2, cutoff=cutoff):
+        nm, ck = candidates[k]
+        if nm.lower() not in seen:
+            seen.add(nm.lower())
+            ranked.append((nm, ck))
+
+    # 2) token-containment — a full query word that is (or starts) a name word,
+    #    e.g. "posion status" nothing fuzzy but "poison" tokens overlap. Cheap
+    #    backstop that only fires when fuzzy under-delivers.
+    if len(ranked) < n:
+        q_tokens = set(t for t in q.split("-") if len(t) >= 4)
+        for k in keys:
+            nm, ck = candidates[k]
+            if nm.lower() in seen:
+                continue
+            name_tokens = set(k.split("-"))
+            if q_tokens & name_tokens:
+                seen.add(nm.lower())
+                ranked.append((nm, ck))
+            if len(ranked) >= n:
+                break
+
+    return ranked[:n]
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 def _parse_value_flag(flags_with_args, name):
@@ -596,6 +671,12 @@ def main() -> None:
 
     if not results:
         print(f"No match for '{query}' in {category}.")
+        hints = suggest(query, category=category if cat_specified else None, ruleset=hit_rs)
+        if hints:
+            pretty = ", ".join(
+                f"{nm} ({ck.rstrip('s').replace('_', ' ')})" for nm, ck in hints
+            )
+            print(f"Did you mean: {pretty}?")
         sys.exit(0)
 
     for r in results:

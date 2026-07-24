@@ -178,15 +178,52 @@
     position: fixed; inset: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 72px 18vw 80px 230px;  /* left: sidebar width + gap */
+    padding: 72px max(340px, 18vw) 80px 230px;  /* left: sidebar+gap; right: clears the settings column */
     z-index: 4;
     scroll-behavior: smooth;
-    transition: padding-left 0.4s ease;
+    transition: padding 0.4s ease;
     /* Hide scrollbar but keep scroll */
     scrollbar-width: none;
   }
   #text-scroll::-webkit-scrollbar { display: none; }
   #text-scroll.sidebar-hidden { padding-left: 60px; }
+  /* When the settings column is collapsed, the prose reclaims the right space
+     (only the small toggle row remains up there). */
+  #text-scroll.controls-hidden { padding-right: 120px; }
+
+  /* ── "New ↓" pill — appears when the reader has scrolled up and fresh
+       narration has arrived below. Tap to jump back to the newest text. ── */
+  #new-content-pill {
+    position: fixed;
+    left: calc(50% + 106px);   /* nudge right to center over the reading column past the sidebar */
+    bottom: 96px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 20;
+    font-family: 'Cinzel', serif;
+    font-size: 12px; letter-spacing: 1px;
+    color: #f0d27a;
+    background: rgba(40, 28, 8, 0.92);
+    border: 1px solid rgba(210, 180, 90, 0.6);
+    border-radius: 16px;
+    padding: 7px 16px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  #new-content-pill.visible {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #new-content-pill:hover {
+    background: rgba(60, 42, 12, 0.96);
+    border-color: rgba(230, 200, 110, 0.85);
+  }
+  #text-scroll.sidebar-hidden ~ #new-content-pill { left: 50%; }
+  :root[data-theme="light"] #new-content-pill {
+    color: rgb(70, 50, 18);
+    background: rgba(245, 238, 222, 0.96);
+    border-color: rgba(140, 95, 20, 0.5);
+  }
 
   /* ── Text content ── */
   #text-content {
@@ -662,6 +699,7 @@
     padding: 1px 5px;
     border-radius: 2px;
     border: 1px solid;
+    cursor: pointer;   /* tap to open the condition's rule text */
   }
   .sb-condition-pill.danger {
     color: rgba(220,80,80,0.9);
@@ -962,6 +1000,33 @@
     margin-bottom: 12px; font-style: italic;
   }
   #srd-body .srd-desc { white-space: pre-wrap; }
+  /* ── SRD "did you mean?" near-miss chips ── */
+  .srd-did-you-mean {
+    margin-top: 14px; display: flex; flex-wrap: wrap;
+    align-items: center; gap: 6px;
+  }
+  .srd-dym-label {
+    font-size: 10px; font-family: 'Cinzel', serif;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: rgba(180,140,60,0.55); margin-right: 2px;
+  }
+  .srd-suggest-chip {
+    font-family: inherit; font-size: 11px;
+    color: rgba(210,180,90,0.92);
+    background: rgba(180,140,60,0.12);
+    border: 1px solid rgba(180,140,60,0.4);
+    border-radius: 4px; padding: 3px 9px; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .srd-suggest-chip:hover {
+    background: rgba(180,140,60,0.24);
+    border-color: rgba(210,180,90,0.7);
+  }
+  :root[data-theme="light"] .srd-suggest-chip {
+    color: rgb(70,50,18); background: rgba(140,95,20,0.1);
+    border-color: rgba(140,95,20,0.4);
+  }
+  :root[data-theme="light"] .srd-dym-label { color: rgba(110,75,20,0.7); }
   #srd-loading {
     font-size: 11px; font-family: 'Cinzel', serif;
     letter-spacing: 2px; text-transform: uppercase;
@@ -2321,6 +2386,14 @@
   /* Make room for the existing #audio-controls cluster — push down when both render */
   body:not(.input-only) #audio-controls { top: 138px; }
 
+  /* Settings-column hide toggle (mirrors the left sidebar's toggle). Collapsed
+     folds every row away except the toggle row itself, so the narration
+     reclaims the right side. */
+  #audio-controls.collapsed .audio-row:not(#controls-toggle-row) { display: none; }
+  #controls-toggle-row { cursor: pointer; justify-content: flex-end; }
+  #controls-toggle-row .audio-label { color: rgba(180,140,60,0.5); }
+  #controls-toggle-row:hover .audio-label { color: rgba(180,140,60,0.9); }
+
   #phone-mode-menu {
     position: fixed;
     top: 132px;
@@ -3516,6 +3589,9 @@
 
 <!-- Audio toggle controls — SFX triggered by narration text -->
 <div id="audio-controls">
+  <div class="audio-row" id="controls-toggle-row" title="Hide the settings column">
+    <span class="audio-label" id="controls-toggle">Hide ▶</span>
+  </div>
   <div class="audio-row" id="sfx-row" title="Sound effects (triggered by narration)">
     <span class="audio-label">Sound Effects</span>
     <div class="toggle-track" id="sfx-track"><div class="toggle-thumb"></div></div>
@@ -3738,6 +3814,7 @@
 <div id="text-scroll">
   <div id="text-content"></div>
 </div>
+<button id="new-content-pill" type="button" aria-label="Jump to newest narration">New ↓</button>
 
 <script>
 'use strict';
@@ -4467,10 +4544,22 @@ function _mdParse(text) {
 
 // Auto-scroll: only follow if the user hasn't scrolled up
 let userScrolledUp = false;
+const _newPill = document.getElementById('new-content-pill');
+function _showNewPill() { if (_newPill) _newPill.classList.add('visible'); }
+function _hideNewPill() { if (_newPill) _newPill.classList.remove('visible'); }
 textScroll.addEventListener('scroll', () => {
   const distFromBottom = textScroll.scrollHeight - textScroll.scrollTop - textScroll.clientHeight;
   userScrolledUp = distFromBottom > 80;
+  // Back near the bottom — the reader has caught up, so retire the pill.
+  if (!userScrolledUp) _hideNewPill();
 });
+if (_newPill) {
+  _newPill.addEventListener('click', () => {
+    userScrolledUp = false;
+    _hideNewPill();
+    textScroll.scrollTop = textScroll.scrollHeight;
+  });
+}
 
 let charDelay = 36;      // ms per character while typing (mutable — see speed toggle)
 const IDLE_GAP   = 1800; // ms silence before starting a new block
@@ -5066,6 +5155,11 @@ function handleIncomingText(text) {
 function scrollToBottom() {
   if (!userScrolledUp) {
     textScroll.scrollTop = textScroll.scrollHeight;
+    _hideNewPill();
+  } else {
+    // New narration landed below the fold — surface the "New ↓" pill so the
+    // reader knows there's fresh text and can jump to it.
+    _showNewPill();
   }
 }
 
@@ -5243,6 +5337,10 @@ function _buildPlayerCard(p, solo) {
       const cls  = CONDITION_CLASS[c.toLowerCase()] || 'info';
       pill.className   = `sb-condition-pill ${cls}`;
       pill.textContent = c;
+      // Tap a condition to pull its rule text (SRD condition lookup). The name
+      // may carry a suffix like "Exhaustion (2)" — strip it to the base name.
+      pill.dataset.srdName = c.replace(/\s*\(.*\)\s*$/, '').trim();
+      pill.dataset.srdCategory = 'condition';
       condEl.appendChild(pill);
     });
     card.appendChild(condEl);
@@ -5672,7 +5770,22 @@ function openSrdModal(name, category, level) {
         const linkHtml = data.wikidot_url
           ? `<br><a href="${data.wikidot_url}" target="_blank" rel="noopener" style="color:#c9a84c;font-size:11px;opacity:0.85;text-decoration:none;">View on D&D 5e Wiki ↗</a>`
           : `<br><span style="font-size:10px;opacity:0.6">May be from a supplement (Xanathar's, Tasha's, etc.)</span>`;
-        body.innerHTML = `<div id="srd-not-found">"${_esc(name)}" is not in the local dataset.${linkHtml}</div>`;
+        // Near-miss "did you mean?" chips — tap one to re-run the lookup on the
+        // closest matching name. Recovers a mistyped spell/condition/monster
+        // instead of dead-ending on the not-found notice.
+        let didYouMean = '';
+        if (Array.isArray(data.suggestions) && data.suggestions.length) {
+          const chips = data.suggestions.map(s =>
+            `<button class="srd-suggest-chip" data-srd-name="${_esc(s.name)}" data-srd-category="${_esc(s.category || '')}">${_esc(s.name)}</button>`
+          ).join('');
+          didYouMean = `<div class="srd-did-you-mean"><span class="srd-dym-label">Did you mean</span>${chips}</div>`;
+        }
+        body.innerHTML = `<div id="srd-not-found">"${_esc(name)}" is not in the local dataset.${linkHtml}</div>${didYouMean}`;
+        body.querySelectorAll('.srd-suggest-chip').forEach(chip => {
+          chip.addEventListener('click', () => {
+            openSrdModal(chip.dataset.srdName, chip.dataset.srdCategory || '', level);
+          });
+        });
         return;
       }
       badge.textContent = data.category || '';
@@ -5732,6 +5845,14 @@ document.getElementById('sheet-content').addEventListener('click', e => {
 
 // Delegated listener — catches clicks on any .sb-player card even after DOM rebuilds
 document.getElementById('sidebar').addEventListener('click', function(e) {
+  // A condition pill takes precedence over the card → open its rule lookup
+  // instead of the character sheet.
+  const pill = e.target.closest('.sb-condition-pill[data-srd-name]');
+  if (pill) {
+    e.stopPropagation();
+    openSrdModal(pill.dataset.srdName, 'condition', null);
+    return;
+  }
   const card = e.target.closest('.sb-player[data-player-name]');
   if (card) openSheet(card.dataset.playerName);
 });
@@ -7126,6 +7247,28 @@ function _setSidebarVisible(visible) {
 }
 
 _sidebarBtn.addEventListener('click', () => _setSidebarVisible(!_sidebarVisible));
+
+// Settings-column (right) hide toggle — mirrors the left sidebar toggle.
+const _audioControls = document.getElementById('audio-controls');
+const _controlsBtn   = document.getElementById('controls-toggle');
+let _controlsVisible = true;
+function _setControlsVisible(visible) {
+  _controlsVisible = visible;
+  if (visible) {
+    _audioControls.classList.remove('collapsed');
+    _textScroll.classList.remove('controls-hidden');
+    if (_controlsBtn) _controlsBtn.textContent = 'Hide ▶';
+  } else {
+    _audioControls.classList.add('collapsed');
+    _textScroll.classList.add('controls-hidden');
+    if (_controlsBtn) _controlsBtn.textContent = '◀ Settings';
+  }
+  try { localStorage.setItem('dnd-controls-visible', visible ? '1' : '0'); } catch (e) {}
+}
+if (_controlsBtn) {
+  _controlsBtn.addEventListener('click', () => _setControlsVisible(!_controlsVisible));
+  try { if (localStorage.getItem('dnd-controls-visible') === '0') _setControlsVisible(false); } catch (e) {}
+}
 
 // Toggle button becomes visible once sidebar has data (called from SSE handler)
 

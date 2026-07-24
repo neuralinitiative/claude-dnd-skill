@@ -121,9 +121,10 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
 4. Read SKILL-scripts.md (for script syntax this session)
 5. **Mark this campaign active** (for the autosave hook): write `{"name": "<campaign-name>"}` to `$(python3 ${CLAUDE_SKILL_DIR}/scripts/paths.py runtime-dir)/active-campaign.json`. This is what `autosave_checkpoint.py` reads to know which campaign to checkpoint; a stale marker is harmless. Then read state.md, world.md, npcs.md (index only), and all characters/*.md
    - **state.md contains `## DM Style Notes`** — read and internalize before narrating anything. These are table-specific calibration patterns that override default DM instincts.
+   - **state.md contains `## Pinned Facts`** — read and keep hot for the whole session. These are stable soft facts the table has chosen never to forget (a promise made, a dead relative's name, a house rule, a running joke, a detail the player flagged as mattering). Unlike Live State Flags, they don't change turn-to-turn — they are standing canon. Weave them in when relevant and never contradict one; if a pinned fact is now wrong, correct it via `/dm:dnd pin` rather than silently overriding it. If the section reads *(none pinned yet)*, there's nothing to load.
    - **world.md:** Load in full — World Foundations, Three Truths, and factions inform narration and faction moves. Do NOT read `world-seeds.md` at load (generation artifact, not live reference).
    - **world-nodes.md (imported campaigns only):** Do **NOT** load at session start. It holds the full Quest Seed Bank and Adventure Nodes for the whole module; read only the current act's nodes on demand when a scene needs them. If the file is absent (dynamic/sandbox, or an older import), there is nothing to lazy-load — `world.md` already carries the nodes, unchanged from prior behavior.
-   - **arc.md (imported campaigns only):** Do **NOT** load at session start. `state.md → ## Campaign Arc` already carries the current + next chapter window. Read `arc.md` only when advancing chapters or when a player asks about the broader arc. If absent, the arc lives inline in `state.md` (dynamic/sandbox) — read it there as before.
+   - **arc.md (imported campaigns only):** Do **NOT** load at session start. `state.md → ## Campaign Arc` already carries the current + next chapter window. Read `arc.md` only when advancing chapters or when a player asks about the broader arc. If absent, the arc lives inline in `state.md` (dynamic/sandbox) — read it there as before. **Sanity-check the pointer at load:** if `## Campaign Arc`'s `current_chapter` shows its `outstanding_beats` already cleared, or the last session plainly ended in the *next* chapter's location or situation, the pointer never advanced — surface it (*"the current chapter looks finished; pick up in `<next_chapter>`?"*) instead of opening another scene in a chapter that's already done. A pointer that never moves is exactly how a structured campaign quietly drifts off its own arc and starts improvising.
    - **source/<chapter-id>.md (imported campaigns only):** the full module text, one file per chapter. Never loaded at session start. Before running a scene in a chapter, read that chapter's `source/<id>.md` (the `source_ref` in the arc) — and only that chapter. This is the predefined-story equivalent of reading a single NPC's full entry on demand.
    - **npcs.md:** Index row only at load. **Before writing substantive dialogue or decisions for any named NPC, read their full entry in `npcs-full.md`.** Do not wait for an explicit `/dm:dnd npc [name]` call — do it proactively when a scene centers on that character. Index rows carry surface traits only; personality axes, relationships, and hidden goals are in the full entry.
    - **Do NOT read session-log.md at load** — recent events are already in `state.md → ## Recent Events`. Only read session-log.md if the player explicitly requests a recap, or if DM Calibration from the last 1-2 sessions is needed and not already internalized.
@@ -327,7 +328,7 @@ On confirmation:
    - `mkdir -p ~/.claude/dnd/campaigns/<name>/source`
    - For each chapter in arc.md, write `source/<chapter-id>.md` (e.g. `source/1.1.md`) containing that chapter's source text from the extracted chunks. Use the same chapter ids as arc.md.
    - Write `source-index.md` — a table mapping `chapter-id → source/<id>.md → one-line scope`, plus source title and import date.
-   - Validate the layout: `python3 ${CLAUDE_SKILL_DIR}/scripts/corpus_check.py --campaign <name>` (expects "lazy-corpus layout OK"). Fix any orphan/missing-file warnings before finishing.
+   - Validate the layout: `python3 ${CLAUDE_SKILL_DIR}/scripts/corpus_check.py --campaign <name>` (expects "lazy-corpus layout OK"). Fix any orphan/missing-file problems before finishing. If it prints an **oversized-chapter WARNING**, split that chapter into sub-chapters (e.g. `1.1a` / `1.1b` at natural scene breaks) across `arc.md`, `source-index.md`, and `source/`, then re-run — a single giant chapter is the one thing that still bloats a load, so keep each `source/<id>.md` comfortably under the limit.
 
 7. Write **session-log.md** with Session 0 import record:
    ```
@@ -365,7 +366,7 @@ Write session events to session-log.md, update state.md (location, active quests
 
 If nothing changed in a category this session, leave it as-is. If a fact was wrong in the previous save, correct it.
 
-**Structured (imported) campaigns — keep the arc window and arc.md in sync.** When a chapter advances this session: mark the completed chapter `status: complete` in `arc.md`, set the new chapter `status: current`, and update `state.md → ## Campaign Arc` so its `current_chapter`, `current_chapter_detail`, `next_chapter`, and `outstanding_beats` reflect the new window. The full tree stays in `arc.md`; `state.md` carries only the current + next chapter so the load stays light. If no chapter advanced, only update `outstanding_beats`/`steering_notes` inline in `state.md` — no need to touch `arc.md`. (Dynamic/sandbox campaigns have no `arc.md`; update the inline arc in `state.md` as before.)
+**Structured (imported) campaigns — keep the arc window and arc.md in sync.** Advancing the pointer is not optional bookkeeping — it is what keeps the campaign on its own rails, and a pointer that never moves is how an imported module quietly becomes an improvised one. Before you decide "no chapter advanced," check honestly: **if this session cleared the last of the current chapter's `outstanding_beats`, or the party has plainly moved into the next chapter's location or situation, the chapter advanced — treat it as such and move the pointer now.** When a chapter advances: mark the completed chapter `status: complete` in `arc.md`, set the new chapter `status: current`, and update `state.md → ## Campaign Arc` so its `current_chapter`, `current_chapter_detail`, `next_chapter`, and `outstanding_beats` reflect the new window. The full tree stays in `arc.md`; `state.md` carries only the current + next chapter so the load stays light. Only when the party is genuinely still mid-chapter, update `outstanding_beats`/`steering_notes` inline in `state.md` — no need to touch `arc.md`. (Dynamic/sandbox campaigns have no `arc.md`; update the inline arc in `state.md` as before.)
 
 Then update `## Faction Moves` in state.md: for each active faction, answer *"what did they do while the party was occupied?"* One line per faction — even if nothing visible yet. Confirm what was written.
 
@@ -412,6 +413,7 @@ The continuity summary is what stays hot in context. The full verbose log is in 
 **Campaign-graph relationship-shift sweep:** before completing the save, scan this session's narration for relationship shifts that weren't captured live via `/dm:dnd graph add-edge` / `close-edge`. Look for moments matching these patterns:
 
 - New alliance, betrayal, or rivalry between named NPCs / factions ("Velkyn now serves the Pale Court")
+- A shift in how the **party** stands toward an NPC or faction ("the Pale Court now reads the party as hostile", "Aldric came around and trusts them"). Draft these as `set-disposition --to <npc-or-faction> --level <allied/friendly/neutral/suspicious/hostile>` calls, matching the `standing` you push to the display and the NPC-disposition lines in `## Live State Flags`.
 - An NPC moving into / out of a location ("Mira fled the Citadel for the Lowmarket")
 - A faction taking control of (or losing) a place ("House Tarn lost the silver mine")
 - A character learning a secret ("the party now knows Velkyn was the spy")
@@ -530,6 +532,22 @@ python3 -c "import sys; sys.path.insert(0,'${CLAUDE_SKILL_DIR}/scripts'); from p
 ```
 
 The result drives branching at steps 1 (ASI source), 4 (origin feat), and 5 (subclass timing). The default `2014` applies for legacy campaigns predating the ruleset field.
+
+**First, offer the two build paths — call `AskUserQuestion`:** *"How do you want to build [or: your character]?"*
+- `Step by step` → the guided flow below (steps 1–10). Use this when the player wants to make each choice deliberately, or already knows the exact build.
+- `Describe it` → the prose path (step 0 below). Use this when the player would rather say who the character is in a sentence and let you assemble a legal sheet.
+
+Default to `Step by step` if the question is dismissed. Either path lands in the same sheet and runs the same validation, calc, and write steps — the only difference is how the choices are gathered.
+
+0. **Describe-it path.** Ask one open question: *"In a sentence or two, describe your character — who they are, how they fight or solve problems, where they come from. I'll build a legal, level-appropriate 5e sheet from it and show you before anything's written."* Then:
+
+   a. **Derive the build from the prose, model-side.** Map the description to a legal 5e chassis for this campaign's ruleset: **class** (and, if the level warrants it, subclass per the ruleset's timing — see step 5), **species/race**, **background**, ability-score priorities (which two or three scores the concept leans on), skill/tool proficiencies the class+background grant, a fighting style or starting spells if the class has them, and a one-line **Character Pillar** (Bond / Flaw / Ideal / Goal — the same field step 2 fills). Read the description for what the player actually cares about — a "disgraced temple guard who talks their way out of fights" is a Paladin or Cleric with a Soldier/Acolyte background and CHA/CON priority, not a generic pick. Never invent a detail the prose contradicts; where the prose is silent, choose the most concept-fitting legal option and note it as a choice, not a fact.
+
+   b. **Validate against 5e legality before showing anything.** The derived sheet must be legal for the campaign's ruleset and the agreed starting level: class/species/background all exist in 5e (SRD or a source the table allows — look up anything you're unsure of via `lookup.py`), ability scores come from a legal method (roll or point buy — step 3), ASI source matches the ruleset (race in 2014, background + one origin feat in 2024 — step 1), proficiencies are actually granted by the chosen class+background (no double-dipping, no out-of-list picks), and any spells/features are available at this level. If the concept implies something illegal (a level-1 character with a capstone feature, a subclass earlier than the ruleset grants it), pick the closest legal equivalent and say so.
+
+   c. **Present the derived sheet for one confirmation.** Show the full build — species/race, class (+ subclass if any), background, ability array with the concept's priorities assigned, proficiencies, starting kit, and the derived Pillar with its source sentence — and ask: *"This is what I read from your description. Change anything, or shall I roll it up?"* Let the player adjust any field in prose; re-validate after any change.
+
+   d. **Converge into the shared flow.** On confirmation, run the name-uniqueness check (step 1's `name_registry.py check`), then continue at **step 3** (finalize ability scores — reuse the derived priorities), **step 4** (racial/background bonuses + `character.py calc`), and steps 6–10 (equipment, write, roster mirror, supplemental builder). Do not re-ask the step-by-step questions the description already answered; only fill genuine gaps.
 
 1. Ask: name, **species** (2024) or **race** (2014), class, background.
 
@@ -715,6 +733,17 @@ DNDEND
 ## `/dm:dnd recap`
 Read session-log.md. Deliver 3–5 sentence in-character narrator recap of the most recent session entry.
 
+## `/dm:dnd pin [<fact> | list | remove <fact-or-number>]`
+
+Manage the campaign's **Pinned Facts** — the soft, stable canon the table never wants forgotten. Pinned facts live in `state.md → ## Pinned Facts` and are read at every `/dm:dnd load` alongside `## DM Style Notes`, then kept hot for the whole session. They are the DM's long-term memory: things that don't fit Live State Flags (which track shifting state) because they don't change — a promise made, a dead sibling's name, an in-joke, a house rule, a detail the player has said matters.
+
+- **`/dm:dnd pin <fact>`** — append `<fact>` as a new bullet under `## Pinned Facts` (replacing the *(none pinned yet)* placeholder if present). Confirm what was pinned. Keep each fact to one line; pin the fact, not a paragraph.
+- **`/dm:dnd pin`** *(no args, mid-scene)* — when the player says "remember this" / "don't forget X" / "pin that", capture the fact they mean in one line and pin it as above, then acknowledge briefly in the fiction and move on.
+- **`/dm:dnd pin list`** — read and print the current `## Pinned Facts` bullets.
+- **`/dm:dnd pin remove <fact-or-number>`** — remove the matching bullet (by its text or its position in the list). If it leaves the section empty, restore the *(none pinned yet)* placeholder. Confirm the removal.
+
+Pinned facts are never rewritten wholesale at `/dm:dnd save` the way Live State Flags are — they only change when the player pins or unpins one, or when one is corrected because it became wrong. A running account of *what happened* already lives in `session-log.md`, `## Recent Events`, and `## Continuity Archive` (queried via `/dm:dnd recap`); Pinned Facts is the separate, deliberately small set of things to always carry, not a second event log.
+
 ## `/dm:dnd world`
 Read and display world.md.
 
@@ -784,6 +813,13 @@ Add a single node. Type is open vocab; suggested: `npc`, `faction`, `place`, `it
 
 ### `/dm:dnd graph add-edge --from <id> --to <id> --type T [--since N] [--note ...]`
 Add a typed edge between two existing nodes. Edge type is open vocab; common: `loyal_to`, `opposes`, `allied_with`, `member_of`, `lives_in`, `controls`, `knows_about`, `friends_with`, `lover_of`, `owes`, `rules`, `related_by_blood`, `advances_thread`, `blocks_thread`. Always supply `--since` (the current session number from state.md) so historical replay works.
+
+### `/dm:dnd graph set-disposition --to <npc-or-faction> --level <L> [--since N] [--note ...]`
+Type how the **party** stands toward an NPC or faction on the normalized scale `allied | friendly | neutral | suspicious | hostile` — the same five values the display's faction panel uses, so the graph and the sidebar speak one language. The edge runs from the shared `party` node (auto-created on first use) to the target; its type is inferred from the target — `disposition` for an NPC, `standing` for a faction — and it carries the `level`.
+
+Single-valued and current: setting a new stance **closes** any prior active party→target stance edge at `--since` (its arc stays queryable with `--at-session <old N>`) and adds the new level, so `scene-context` only ever surfaces the party's *current* stance. `scene-context` renders it as `The Party --[disposition:suspicious]--> Aldric` so the stance reads at a glance. Always pass `--since <current-session-N>`.
+
+Use it whenever the fiction shifts the party's standing — an NPC turns on them, a faction they wronged goes hostile, an alliance is earned. It is the graph-side counterpart to the `standing` values pushed to the display via `push_stats.py --factions` and to the NPC-disposition lines in `state.md → ## Live State Flags`; keep the three consistent when a stance changes.
 
 ### `/dm:dnd graph close-edge --id <edge-id> --at-session N`
 Mark an edge as ended at session N (e.g. when an alliance breaks). Original edge is preserved with `until_session` set; it remains visible in historical queries but is excluded from "active at session ≥ N" results.

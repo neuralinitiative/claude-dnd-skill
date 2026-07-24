@@ -375,6 +375,81 @@ class GraphSubcommandTests(unittest.TestCase):
                             f"category node has non-cat_ id: {n['id']}")
             self.assertEqual(n["type"], "category")
 
+    # ── set-disposition (party stance typing) ──────────────────────────────
+
+    def _active_stance(self, graph, to_id):
+        """Return the single active (unclosed, un-superseded) party→to_id edge."""
+        act = [e for e in graph["edges"]
+               if e["from"] == "party" and e["to"] == to_id
+               and e.get("until_session") is None and not e.get("superseded_by")]
+        return act
+
+    def test_set_disposition_creates_party_node_and_edge(self):
+        _run(["add-node", "--campaign", self.campaign,
+              "--type", "npc", "--name", "Aldric"], env_overrides=self.env)
+        rc, out, err = _run(
+            ["set-disposition", "--campaign", self.campaign,
+             "--to", "Aldric", "--level", "friendly", "--since", "2",
+             "--note", "helped in the mine"],
+            env_overrides=self.env,
+        )
+        self.assertEqual(rc, 0, msg=err)
+        graph = self._graph_json()
+        party = [n for n in graph["nodes"] if n["id"] == "party"]
+        self.assertEqual(len(party), 1)
+        self.assertEqual(party[0]["type"], "party")
+        act = self._active_stance(graph, "npc_aldric")
+        self.assertEqual(len(act), 1)
+        self.assertEqual(act[0]["type"], "disposition")
+        self.assertEqual(act[0]["level"], "friendly")
+        self.assertEqual(act[0]["since_session"], 2)
+
+    def test_faction_target_gets_standing_type(self):
+        _run(["add-node", "--campaign", self.campaign,
+              "--type", "faction", "--name", "Pale Court"], env_overrides=self.env)
+        rc, out, err = _run(
+            ["set-disposition", "--campaign", self.campaign,
+             "--to", "Pale Court", "--level", "hostile"],
+            env_overrides=self.env,
+        )
+        self.assertEqual(rc, 0, msg=err)
+        graph = self._graph_json()
+        act = self._active_stance(graph, "faction_pale_court")
+        self.assertEqual(len(act), 1)
+        self.assertEqual(act[0]["type"], "standing")
+        self.assertEqual(act[0]["level"], "hostile")
+
+    def test_changing_disposition_closes_prior(self):
+        _run(["add-node", "--campaign", self.campaign,
+              "--type", "npc", "--name", "Aldric"], env_overrides=self.env)
+        _run(["set-disposition", "--campaign", self.campaign,
+              "--to", "Aldric", "--level", "friendly", "--since", "2"],
+             env_overrides=self.env)
+        _run(["set-disposition", "--campaign", self.campaign,
+              "--to", "Aldric", "--level", "suspicious", "--since", "5"],
+             env_overrides=self.env)
+        graph = self._graph_json()
+        # Exactly one active; the prior is closed at the new since, not deleted.
+        act = self._active_stance(graph, "npc_aldric")
+        self.assertEqual(len(act), 1)
+        self.assertEqual(act[0]["level"], "suspicious")
+        closed = [e for e in graph["edges"]
+                  if e["from"] == "party" and e["to"] == "npc_aldric"
+                  and e.get("until_session") == 5]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["level"], "friendly")
+
+    def test_invalid_level_rejected(self):
+        _run(["add-node", "--campaign", self.campaign,
+              "--type", "npc", "--name", "Aldric"], env_overrides=self.env)
+        rc, out, err = _run(
+            ["set-disposition", "--campaign", self.campaign,
+             "--to", "Aldric", "--level", "enemy"],
+            env_overrides=self.env,
+        )
+        self.assertEqual(rc, 1)
+        self.assertIn("must be one of", err)
+
 
 if __name__ == "__main__":
     unittest.main()
