@@ -121,6 +121,7 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
 4. Read SKILL-scripts.md (for script syntax this session)
 5. **Mark this campaign active** (for the autosave hook): write `{"name": "<campaign-name>"}` to `$(python3 ${CLAUDE_SKILL_DIR}/scripts/paths.py runtime-dir)/active-campaign.json`. This is what `autosave_checkpoint.py` reads to know which campaign to checkpoint; a stale marker is harmless. Then read state.md, world.md, npcs.md (index only), and all characters/*.md
    - **state.md contains `## DM Style Notes`** — read and internalize before narrating anything. These are table-specific calibration patterns that override default DM instincts.
+   - **state.md contains `## Pinned Facts`** — read and keep hot for the whole session. These are stable soft facts the table has chosen never to forget (a promise made, a dead relative's name, a house rule, a running joke, a detail the player flagged as mattering). Unlike Live State Flags, they don't change turn-to-turn — they are standing canon. Weave them in when relevant and never contradict one; if a pinned fact is now wrong, correct it via `/dm:dnd pin` rather than silently overriding it. If the section reads *(none pinned yet)*, there's nothing to load.
    - **world.md:** Load in full — World Foundations, Three Truths, and factions inform narration and faction moves. Do NOT read `world-seeds.md` at load (generation artifact, not live reference).
    - **world-nodes.md (imported campaigns only):** Do **NOT** load at session start. It holds the full Quest Seed Bank and Adventure Nodes for the whole module; read only the current act's nodes on demand when a scene needs them. If the file is absent (dynamic/sandbox, or an older import), there is nothing to lazy-load — `world.md` already carries the nodes, unchanged from prior behavior.
    - **arc.md (imported campaigns only):** Do **NOT** load at session start. `state.md → ## Campaign Arc` already carries the current + next chapter window. Read `arc.md` only when advancing chapters or when a player asks about the broader arc. If absent, the arc lives inline in `state.md` (dynamic/sandbox) — read it there as before.
@@ -730,6 +731,17 @@ DNDEND
 
 ## `/dm:dnd recap`
 Read session-log.md. Deliver 3–5 sentence in-character narrator recap of the most recent session entry.
+
+## `/dm:dnd pin [<fact> | list | remove <fact-or-number>]`
+
+Manage the campaign's **Pinned Facts** — the soft, stable canon the table never wants forgotten. Pinned facts live in `state.md → ## Pinned Facts` and are read at every `/dm:dnd load` alongside `## DM Style Notes`, then kept hot for the whole session. They are the DM's long-term memory: things that don't fit Live State Flags (which track shifting state) because they don't change — a promise made, a dead sibling's name, an in-joke, a house rule, a detail the player has said matters.
+
+- **`/dm:dnd pin <fact>`** — append `<fact>` as a new bullet under `## Pinned Facts` (replacing the *(none pinned yet)* placeholder if present). Confirm what was pinned. Keep each fact to one line; pin the fact, not a paragraph.
+- **`/dm:dnd pin`** *(no args, mid-scene)* — when the player says "remember this" / "don't forget X" / "pin that", capture the fact they mean in one line and pin it as above, then acknowledge briefly in the fiction and move on.
+- **`/dm:dnd pin list`** — read and print the current `## Pinned Facts` bullets.
+- **`/dm:dnd pin remove <fact-or-number>`** — remove the matching bullet (by its text or its position in the list). If it leaves the section empty, restore the *(none pinned yet)* placeholder. Confirm the removal.
+
+Pinned facts are never rewritten wholesale at `/dm:dnd save` the way Live State Flags are — they only change when the player pins or unpins one, or when one is corrected because it became wrong. A running account of *what happened* already lives in `session-log.md`, `## Recent Events`, and `## Continuity Archive` (queried via `/dm:dnd recap`); Pinned Facts is the separate, deliberately small set of things to always carry, not a second event log.
 
 ## `/dm:dnd world`
 Read and display world.md.
