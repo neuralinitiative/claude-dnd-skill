@@ -188,6 +188,40 @@
   #text-scroll::-webkit-scrollbar { display: none; }
   #text-scroll.sidebar-hidden { padding-left: 60px; }
 
+  /* ── "New ↓" pill — appears when the reader has scrolled up and fresh
+       narration has arrived below. Tap to jump back to the newest text. ── */
+  #new-content-pill {
+    position: fixed;
+    left: calc(50% + 106px);   /* nudge right to center over the reading column past the sidebar */
+    bottom: 96px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 20;
+    font-family: 'Cinzel', serif;
+    font-size: 12px; letter-spacing: 1px;
+    color: #f0d27a;
+    background: rgba(40, 28, 8, 0.92);
+    border: 1px solid rgba(210, 180, 90, 0.6);
+    border-radius: 16px;
+    padding: 7px 16px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  #new-content-pill.visible {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #new-content-pill:hover {
+    background: rgba(60, 42, 12, 0.96);
+    border-color: rgba(230, 200, 110, 0.85);
+  }
+  #text-scroll.sidebar-hidden ~ #new-content-pill { left: 50%; }
+  :root[data-theme="light"] #new-content-pill {
+    color: rgb(70, 50, 18);
+    background: rgba(245, 238, 222, 0.96);
+    border-color: rgba(140, 95, 20, 0.5);
+  }
+
   /* ── Text content ── */
   #text-content {
     max-width: 820px;
@@ -662,6 +696,7 @@
     padding: 1px 5px;
     border-radius: 2px;
     border: 1px solid;
+    cursor: pointer;   /* tap to open the condition's rule text */
   }
   .sb-condition-pill.danger {
     color: rgba(220,80,80,0.9);
@@ -3765,6 +3800,7 @@
 <div id="text-scroll">
   <div id="text-content"></div>
 </div>
+<button id="new-content-pill" type="button" aria-label="Jump to newest narration">New ↓</button>
 
 <script>
 'use strict';
@@ -4494,10 +4530,22 @@ function _mdParse(text) {
 
 // Auto-scroll: only follow if the user hasn't scrolled up
 let userScrolledUp = false;
+const _newPill = document.getElementById('new-content-pill');
+function _showNewPill() { if (_newPill) _newPill.classList.add('visible'); }
+function _hideNewPill() { if (_newPill) _newPill.classList.remove('visible'); }
 textScroll.addEventListener('scroll', () => {
   const distFromBottom = textScroll.scrollHeight - textScroll.scrollTop - textScroll.clientHeight;
   userScrolledUp = distFromBottom > 80;
+  // Back near the bottom — the reader has caught up, so retire the pill.
+  if (!userScrolledUp) _hideNewPill();
 });
+if (_newPill) {
+  _newPill.addEventListener('click', () => {
+    userScrolledUp = false;
+    _hideNewPill();
+    textScroll.scrollTop = textScroll.scrollHeight;
+  });
+}
 
 let charDelay = 36;      // ms per character while typing (mutable — see speed toggle)
 const IDLE_GAP   = 1800; // ms silence before starting a new block
@@ -5093,6 +5141,11 @@ function handleIncomingText(text) {
 function scrollToBottom() {
   if (!userScrolledUp) {
     textScroll.scrollTop = textScroll.scrollHeight;
+    _hideNewPill();
+  } else {
+    // New narration landed below the fold — surface the "New ↓" pill so the
+    // reader knows there's fresh text and can jump to it.
+    _showNewPill();
   }
 }
 
@@ -5270,6 +5323,10 @@ function _buildPlayerCard(p, solo) {
       const cls  = CONDITION_CLASS[c.toLowerCase()] || 'info';
       pill.className   = `sb-condition-pill ${cls}`;
       pill.textContent = c;
+      // Tap a condition to pull its rule text (SRD condition lookup). The name
+      // may carry a suffix like "Exhaustion (2)" — strip it to the base name.
+      pill.dataset.srdName = c.replace(/\s*\(.*\)\s*$/, '').trim();
+      pill.dataset.srdCategory = 'condition';
       condEl.appendChild(pill);
     });
     card.appendChild(condEl);
@@ -5774,6 +5831,14 @@ document.getElementById('sheet-content').addEventListener('click', e => {
 
 // Delegated listener — catches clicks on any .sb-player card even after DOM rebuilds
 document.getElementById('sidebar').addEventListener('click', function(e) {
+  // A condition pill takes precedence over the card → open its rule lookup
+  // instead of the character sheet.
+  const pill = e.target.closest('.sb-condition-pill[data-srd-name]');
+  if (pill) {
+    e.stopPropagation();
+    openSrdModal(pill.dataset.srdName, 'condition', null);
+    return;
+  }
   const card = e.target.closest('.sb-player[data-player-name]');
   if (card) openSheet(card.dataset.playerName);
 });
