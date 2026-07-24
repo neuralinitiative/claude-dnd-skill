@@ -962,6 +962,33 @@
     margin-bottom: 12px; font-style: italic;
   }
   #srd-body .srd-desc { white-space: pre-wrap; }
+  /* ── SRD "did you mean?" near-miss chips ── */
+  .srd-did-you-mean {
+    margin-top: 14px; display: flex; flex-wrap: wrap;
+    align-items: center; gap: 6px;
+  }
+  .srd-dym-label {
+    font-size: 10px; font-family: 'Cinzel', serif;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: rgba(180,140,60,0.55); margin-right: 2px;
+  }
+  .srd-suggest-chip {
+    font-family: inherit; font-size: 11px;
+    color: rgba(210,180,90,0.92);
+    background: rgba(180,140,60,0.12);
+    border: 1px solid rgba(180,140,60,0.4);
+    border-radius: 4px; padding: 3px 9px; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .srd-suggest-chip:hover {
+    background: rgba(180,140,60,0.24);
+    border-color: rgba(210,180,90,0.7);
+  }
+  :root[data-theme="light"] .srd-suggest-chip {
+    color: rgb(70,50,18); background: rgba(140,95,20,0.1);
+    border-color: rgba(140,95,20,0.4);
+  }
+  :root[data-theme="light"] .srd-dym-label { color: rgba(110,75,20,0.7); }
   #srd-loading {
     font-size: 11px; font-family: 'Cinzel', serif;
     letter-spacing: 2px; text-transform: uppercase;
@@ -5672,7 +5699,22 @@ function openSrdModal(name, category, level) {
         const linkHtml = data.wikidot_url
           ? `<br><a href="${data.wikidot_url}" target="_blank" rel="noopener" style="color:#c9a84c;font-size:11px;opacity:0.85;text-decoration:none;">View on D&D 5e Wiki ↗</a>`
           : `<br><span style="font-size:10px;opacity:0.6">May be from a supplement (Xanathar's, Tasha's, etc.)</span>`;
-        body.innerHTML = `<div id="srd-not-found">"${_esc(name)}" is not in the local dataset.${linkHtml}</div>`;
+        // Near-miss "did you mean?" chips — tap one to re-run the lookup on the
+        // closest matching name. Recovers a mistyped spell/condition/monster
+        // instead of dead-ending on the not-found notice.
+        let didYouMean = '';
+        if (Array.isArray(data.suggestions) && data.suggestions.length) {
+          const chips = data.suggestions.map(s =>
+            `<button class="srd-suggest-chip" data-srd-name="${_esc(s.name)}" data-srd-category="${_esc(s.category || '')}">${_esc(s.name)}</button>`
+          ).join('');
+          didYouMean = `<div class="srd-did-you-mean"><span class="srd-dym-label">Did you mean</span>${chips}</div>`;
+        }
+        body.innerHTML = `<div id="srd-not-found">"${_esc(name)}" is not in the local dataset.${linkHtml}</div>${didYouMean}`;
+        body.querySelectorAll('.srd-suggest-chip').forEach(chip => {
+          chip.addEventListener('click', () => {
+            openSrdModal(chip.dataset.srdName, chip.dataset.srdCategory || '', level);
+          });
+        });
         return;
       }
       badge.textContent = data.category || '';
