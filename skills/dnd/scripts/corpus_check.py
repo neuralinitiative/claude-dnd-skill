@@ -14,6 +14,11 @@ This linter checks that the three stay consistent:
   - every chapter id referenced in source-index.md has a source/<id>.md file
   - every source/<id>.md file is referenced by source-index.md (no orphans)
   - arc.md exists when a source layer is present
+  - (advisory) flags any chapter source file large enough that reading it on
+    demand would weigh on the per-load context — the lazy corpus reads a whole
+    chapter at a time, so a giant chapter is the one way a structured campaign
+    can still bloat a session; splitting it keeps play "a handful of chapters,
+    not a whole book"
 
 It is advisory: run it at the end of an import and during tests. Exit 0 = clean,
 exit 1 = problems found (printed to stdout). A campaign with no source/ layer
@@ -35,9 +40,37 @@ import paths  # noqa: E402
 # Matches a source file reference like `source/1.1.md` anywhere in source-index.md.
 _REF = re.compile(r"source/([A-Za-z0-9][\w.\-]*)\.md")
 
+# A source/<id>.md past this many words weighs on the per-load context when the
+# DM reads that whole chapter on demand. Advisory only — splitting the chapter
+# into sub-chapters keeps a load light. ~12k words is roughly a fifth of the
+# comfortable working budget on its own, which is where a single chapter starts
+# to crowd everything else out.
+LARGE_CHAPTER_WORDS = 12000
+
 
 def indexed_ids(index_text: str) -> set:
     return set(_REF.findall(index_text))
+
+
+def size_warnings(campaign: str) -> list:
+    """Advisory: flag chapter source files large enough to bloat context when a
+    single chapter loads. Layout-independent (a big chapter is a clean layout),
+    so this is separate from check() and never changes the exit code."""
+    camp = paths.find_campaign(campaign)
+    source_dir = camp / "source"
+    if not source_dir.exists():
+        return []
+    warns = []
+    for p in sorted(source_dir.glob("*.md")):
+        words = len(p.read_text(encoding="utf-8", errors="replace").split())
+        if words > LARGE_CHAPTER_WORDS:
+            warns.append(
+                f"WARNING: source/{p.stem}.md is ~{words:,} words — large enough to weigh on "
+                f"context when this chapter loads. Consider splitting it into sub-chapters "
+                f"(e.g. {p.stem}a / {p.stem}b) across arc.md + source-index.md so play reads a "
+                f"handful of chapters, not a whole book."
+            )
+    return warns
 
 
 def check(campaign: str) -> tuple[int, list]:
@@ -86,8 +119,12 @@ def main() -> int:
     code, messages = check(args.campaign)
     for m in messages:
         print(m)
+    warns = size_warnings(args.campaign)
+    for w in warns:
+        print(w)
     if code == 0 and not any("nothing to check" in m for m in messages):
-        print(f"{args.campaign}: lazy-corpus layout OK")
+        suffix = f" ({len(warns)} oversized-chapter warning(s))" if warns else ""
+        print(f"{args.campaign}: lazy-corpus layout OK{suffix}")
     return code
 
 
