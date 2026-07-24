@@ -178,15 +178,18 @@
     position: fixed; inset: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 72px 18vw 80px 230px;  /* left: sidebar width + gap */
+    padding: 72px max(340px, 18vw) 80px 230px;  /* left: sidebar+gap; right: clears the settings column */
     z-index: 4;
     scroll-behavior: smooth;
-    transition: padding-left 0.4s ease;
+    transition: padding 0.4s ease;
     /* Hide scrollbar but keep scroll */
     scrollbar-width: none;
   }
   #text-scroll::-webkit-scrollbar { display: none; }
   #text-scroll.sidebar-hidden { padding-left: 60px; }
+  /* When the settings column is collapsed, the prose reclaims the right space
+     (only the small toggle row remains up there). */
+  #text-scroll.controls-hidden { padding-right: 120px; }
 
   /* ── "New ↓" pill — appears when the reader has scrolled up and fresh
        narration has arrived below. Tap to jump back to the newest text. ── */
@@ -2383,6 +2386,14 @@
   /* Make room for the existing #audio-controls cluster — push down when both render */
   body:not(.input-only) #audio-controls { top: 138px; }
 
+  /* Settings-column hide toggle (mirrors the left sidebar's toggle). Collapsed
+     folds every row away except the toggle row itself, so the narration
+     reclaims the right side. */
+  #audio-controls.collapsed .audio-row:not(#controls-toggle-row) { display: none; }
+  #controls-toggle-row { cursor: pointer; justify-content: flex-end; }
+  #controls-toggle-row .audio-label { color: rgba(180,140,60,0.5); }
+  #controls-toggle-row:hover .audio-label { color: rgba(180,140,60,0.9); }
+
   #phone-mode-menu {
     position: fixed;
     top: 132px;
@@ -3578,6 +3589,9 @@
 
 <!-- Audio toggle controls — SFX triggered by narration text -->
 <div id="audio-controls">
+  <div class="audio-row" id="controls-toggle-row" title="Hide the settings column">
+    <span class="audio-label" id="controls-toggle">Hide ▶</span>
+  </div>
   <div class="audio-row" id="sfx-row" title="Sound effects (triggered by narration)">
     <span class="audio-label">Sound Effects</span>
     <div class="toggle-track" id="sfx-track"><div class="toggle-thumb"></div></div>
@@ -7233,6 +7247,28 @@ function _setSidebarVisible(visible) {
 }
 
 _sidebarBtn.addEventListener('click', () => _setSidebarVisible(!_sidebarVisible));
+
+// Settings-column (right) hide toggle — mirrors the left sidebar toggle.
+const _audioControls = document.getElementById('audio-controls');
+const _controlsBtn   = document.getElementById('controls-toggle');
+let _controlsVisible = true;
+function _setControlsVisible(visible) {
+  _controlsVisible = visible;
+  if (visible) {
+    _audioControls.classList.remove('collapsed');
+    _textScroll.classList.remove('controls-hidden');
+    if (_controlsBtn) _controlsBtn.textContent = 'Hide ▶';
+  } else {
+    _audioControls.classList.add('collapsed');
+    _textScroll.classList.add('controls-hidden');
+    if (_controlsBtn) _controlsBtn.textContent = '◀ Settings';
+  }
+  try { localStorage.setItem('dnd-controls-visible', visible ? '1' : '0'); } catch (e) {}
+}
+if (_controlsBtn) {
+  _controlsBtn.addEventListener('click', () => _setControlsVisible(!_controlsVisible));
+  try { if (localStorage.getItem('dnd-controls-visible') === '0') _setControlsVisible(false); } catch (e) {}
+}
 
 // Toggle button becomes visible once sidebar has data (called from SSE handler)
 
