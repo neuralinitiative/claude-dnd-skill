@@ -39,6 +39,8 @@ Usage:
 Subcommands:
   add-node       --type T --name N [--id ID] [--tags t1,t2] [--summary S]
   add-edge       --from FROM --to TO --type T [--since N] [--until N] [--note S]
+  set-disposition --to NPC_OR_FACTION --level L [--since N] [--note S]
+                 (L = allied|friendly|neutral|suspicious|hostile; party stance)
   close-edge     --id EDGE_ID [--at-session N]
   list           [--type T] [--at-session N]
   show           --id ID
@@ -78,6 +80,21 @@ def _save(campaign: str, data: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+# -------- disposition / standing vocabulary --------
+
+# Normalized 5-point scale for how the PARTY stands toward an NPC or faction.
+# Mirrors the display's faction `standing` values so the graph and the sidebar
+# speak the same language. Ordered best → worst.
+DISPOSITION_LEVELS = ["allied", "friendly", "neutral", "suspicious", "hostile"]
+
+# The party's own node — the one endpoint every disposition/standing edge shares.
+PARTY_NODE_ID = "party"
+
+# Edge type per target: the party's stance toward an NPC is a `disposition`;
+# toward a faction it is a `standing`. Both carry a `level` from the scale above.
+_DISPOSITION_EDGE_TYPES = ("disposition", "standing")
 
 
 # -------- helpers --------
@@ -265,6 +282,73 @@ def cmd_supersede_edge(args) -> int:
     return 0
 
 
+def _ensure_party_node(data: dict) -> None:
+    """Make sure the shared `party` node exists (created on first disposition set)."""
+    if _node_by_id(data, PARTY_NODE_ID) is None:
+        data["nodes"].append({
+            "id": PARTY_NODE_ID,
+            "type": "party",
+            "name": "The Party",
+        })
+
+
+def cmd_set_disposition(args) -> int:
+    """Type the party's stance toward an NPC or faction on the normalized scale.
+
+    party --[disposition]--> npc   (allied/friendly/neutral/suspicious/hostile)
+    party --[standing]-----> faction
+
+    Single-valued and current: any prior active party→target stance edge is
+    closed at this session (its arc is preserved for history), then the new
+    level is added. The edge type is inferred from the target node's type —
+    `standing` for a faction, `disposition` for everything else.
+    """
+    level = (args.level or "").strip().lower()
+    if level not in DISPOSITION_LEVELS:
+        print(f"error: --level must be one of {', '.join(DISPOSITION_LEVELS)} (got {args.level!r}).",
+              file=sys.stderr)
+        return 1
+
+    data = _load(args.campaign)
+    to_id = _resolve_or_die(data, args.to_id, "target")
+    if to_id == PARTY_NODE_ID:
+        print("error: cannot set the party's disposition toward itself.", file=sys.stderr)
+        return 1
+    _ensure_party_node(data)
+
+    target = _node_by_id(data, to_id)
+    edge_type = "standing" if (target and target.get("type") == "faction") else "disposition"
+
+    # Close any prior active party→target stance edge so only the current one is
+    # active at this session. History stays queryable via --at-session on old N.
+    closed = 0
+    for e in data["edges"]:
+        if (e.get("from") == PARTY_NODE_ID and e.get("to") == to_id
+                and e.get("type") in _DISPOSITION_EDGE_TYPES
+                and e.get("until_session") is None and not e.get("superseded_by")):
+            e["until_session"] = args.since
+            closed += 1
+
+    edge = {
+        "id": _next_edge_id(data["edges"]),
+        "from": PARTY_NODE_ID,
+        "to": to_id,
+        "type": edge_type,
+        "level": level,
+        "since_session": args.since,
+        "until_session": None,
+    }
+    if args.note:
+        edge["note"] = args.note
+    data["edges"].append(edge)
+    _save(args.campaign, data)
+
+    sess = f" since:{args.since}" if args.since is not None else ""
+    prior = f" (closed {closed} prior)" if closed else ""
+    print(f"set {edge_type} {edge['id']}  party --[{edge_type}:{level}]--> {to_id}{sess}{prior}")
+    return 0
+
+
 def cmd_list(args) -> int:
     data = _load(args.campaign)
     nodes = data["nodes"]
@@ -435,7 +519,10 @@ def _emit_subgraph(sub: dict, at_session: Optional[int]) -> None:
                 sess.append(f"superseded by {e['superseded_by']}")
             sess_str = " (" + ", ".join(sess) + ")" if sess else ""
             note = f"  — {e['note']}" if e.get("note") else ""
-            print(f"  {f_name} --[{e['type']}]--> {t_name}{sess_str}{note}")
+            # Disposition/standing edges carry a level on the normalized scale;
+            # fold it into the type so the party's stance reads at a glance.
+            etype = f"{e['type']}:{e['level']}" if e.get("level") else e["type"]
+            print(f"  {f_name} --[{etype}]--> {t_name}{sess_str}{note}")
 
 
 # -------- argparse --------
@@ -809,6 +896,19 @@ def main() -> int:
     sp.add_argument("--by", help="optional id of the corrected edge that replaces it")
     sp.add_argument("--reason", help="one-line explanation of the retcon")
     sp.set_defaults(func=cmd_supersede_edge)
+
+    sp = sub.add_parser("set-disposition",
+        help="type the party's stance toward an NPC (disposition) or faction "
+             "(standing) on the allied/friendly/neutral/suspicious/hostile scale")
+    add_camp(sp)
+    sp.add_argument("--to", dest="to_id", required=True,
+                    help="target NPC or faction (node id or name)")
+    sp.add_argument("--level", required=True,
+                    help="allied | friendly | neutral | suspicious | hostile")
+    sp.add_argument("--since", type=int, default=None,
+                    help="session number this stance became true")
+    sp.add_argument("--note", help="one-line reason for the stance")
+    sp.set_defaults(func=cmd_set_disposition)
 
     sp = sub.add_parser("list")
     add_camp(sp)

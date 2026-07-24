@@ -413,6 +413,7 @@ The continuity summary is what stays hot in context. The full verbose log is in 
 **Campaign-graph relationship-shift sweep:** before completing the save, scan this session's narration for relationship shifts that weren't captured live via `/dm:dnd graph add-edge` / `close-edge`. Look for moments matching these patterns:
 
 - New alliance, betrayal, or rivalry between named NPCs / factions ("Velkyn now serves the Pale Court")
+- A shift in how the **party** stands toward an NPC or faction ("the Pale Court now reads the party as hostile", "Aldric came around and trusts them"). Draft these as `set-disposition --to <npc-or-faction> --level <allied/friendly/neutral/suspicious/hostile>` calls, matching the `standing` you push to the display and the NPC-disposition lines in `## Live State Flags`.
 - An NPC moving into / out of a location ("Mira fled the Citadel for the Lowmarket")
 - A faction taking control of (or losing) a place ("House Tarn lost the silver mine")
 - A character learning a secret ("the party now knows Velkyn was the spy")
@@ -812,6 +813,13 @@ Add a single node. Type is open vocab; suggested: `npc`, `faction`, `place`, `it
 
 ### `/dm:dnd graph add-edge --from <id> --to <id> --type T [--since N] [--note ...]`
 Add a typed edge between two existing nodes. Edge type is open vocab; common: `loyal_to`, `opposes`, `allied_with`, `member_of`, `lives_in`, `controls`, `knows_about`, `friends_with`, `lover_of`, `owes`, `rules`, `related_by_blood`, `advances_thread`, `blocks_thread`. Always supply `--since` (the current session number from state.md) so historical replay works.
+
+### `/dm:dnd graph set-disposition --to <npc-or-faction> --level <L> [--since N] [--note ...]`
+Type how the **party** stands toward an NPC or faction on the normalized scale `allied | friendly | neutral | suspicious | hostile` — the same five values the display's faction panel uses, so the graph and the sidebar speak one language. The edge runs from the shared `party` node (auto-created on first use) to the target; its type is inferred from the target — `disposition` for an NPC, `standing` for a faction — and it carries the `level`.
+
+Single-valued and current: setting a new stance **closes** any prior active party→target stance edge at `--since` (its arc stays queryable with `--at-session <old N>`) and adds the new level, so `scene-context` only ever surfaces the party's *current* stance. `scene-context` renders it as `The Party --[disposition:suspicious]--> Aldric` so the stance reads at a glance. Always pass `--since <current-session-N>`.
+
+Use it whenever the fiction shifts the party's standing — an NPC turns on them, a faction they wronged goes hostile, an alliance is earned. It is the graph-side counterpart to the `standing` values pushed to the display via `push_stats.py --factions` and to the NPC-disposition lines in `state.md → ## Live State Flags`; keep the three consistent when a stance changes.
 
 ### `/dm:dnd graph close-edge --id <edge-id> --at-session N`
 Mark an edge as ended at session N (e.g. when an alliance breaks). Original edge is preserved with `until_session` set; it remains visible in historical queries but is excluded from "active at session ≥ N" results.
