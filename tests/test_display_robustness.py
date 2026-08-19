@@ -140,7 +140,7 @@ class TailLogicTest(unittest.TestCase):
         (self.campaign_root / "test-camp").mkdir()
         self.tail_file = self.campaign_root / "test-camp" / "session_tail.json"
         self.camp_file = self.tmp_path / ".active_campaign"
-        self.camp_file.write_text("test-camp")
+        self.camp_file.write_text("test-camp", encoding="utf-8")
 
         # Stub paths.find_campaign before importing the app module.
         # We don't want to actually start Flask — just exercise the tail funcs.
@@ -157,7 +157,7 @@ class TailLogicTest(unittest.TestCase):
         We slice from the `# ─── Session tail buffer ───` header to the
         `_load_tail()` call, then exec it with our test fixtures injected.
         """
-        src = (DISPLAY / "dnd-display-app.py").read_text()
+        src = (DISPLAY / "dnd-display-app.py").read_text(encoding="utf-8")
         start = src.index("# ─── Session tail buffer")
         # Stop at the next blank-line section break after _load_tail() call
         end = src.index("\n_load_tail()\n", start) + len("\n_load_tail()\n")
@@ -186,7 +186,7 @@ class TailLogicTest(unittest.TestCase):
         # Pre-load a buffer with content
         self._buffer.append({"text": "preexisting", "_camp": "test-camp"})
         # File on disk is empty
-        self.tail_file.write_text("[]")
+        self.tail_file.write_text("[]", encoding="utf-8")
         self._load()
         # Buffer must NOT be wiped
         self.assertEqual(len(self._buffer), 1)
@@ -199,7 +199,7 @@ class TailLogicTest(unittest.TestCase):
         self.tail_file.write_text(json.dumps([
             {"text": "from-other-campaign", "_camp": "other-camp"},
             {"text": "also-other", "_camp": "another-camp"},
-        ]))
+        ]), encoding="utf-8")
         self._load()
         self.assertEqual(len(self._buffer), 1)
         self.assertEqual(self._buffer[0]["text"], "preexisting")
@@ -210,7 +210,7 @@ class TailLogicTest(unittest.TestCase):
         self.tail_file.write_text(json.dumps([
             {"text": "fresh-1", "_camp": "test-camp"},
             {"text": "fresh-2", "_camp": "test-camp"},
-        ]))
+        ]), encoding="utf-8")
         self._load()
         self.assertEqual(len(self._buffer), 2)
         self.assertEqual([e["text"] for e in self._buffer], ["fresh-1", "fresh-2"])
@@ -222,19 +222,19 @@ class TailLogicTest(unittest.TestCase):
         # File on disk has real content
         self.tail_file.write_text(json.dumps([
             {"text": "important", "_camp": "test-camp"},
-        ]))
+        ]), encoding="utf-8")
         # In-memory buffer is empty
         self._buffer.clear()
         self._persist()
         # File should still have the original content
-        on_disk = json.loads(self.tail_file.read_text())
+        on_disk = json.loads(self.tail_file.read_text(encoding="utf-8"))
         self.assertEqual(len(on_disk), 1)
         self.assertEqual(on_disk[0]["text"], "important")
 
     def test_persist_writes_when_buffer_has_content(self):
         self._buffer.append({"text": "new", "_camp": "test-camp"})
         self._persist()
-        on_disk = json.loads(self.tail_file.read_text())
+        on_disk = json.loads(self.tail_file.read_text(encoding="utf-8"))
         self.assertEqual(on_disk[0]["text"], "new")
 
     def test_persist_atomic_no_tmp_leftover(self):
@@ -256,7 +256,7 @@ class TailLogicTest(unittest.TestCase):
 
     def test_load_corrupt_json_leaves_buffer_alone(self):
         self._buffer.append({"text": "preexisting", "_camp": "test-camp"})
-        self.tail_file.write_text("{not json")
+        self.tail_file.write_text("{not json", encoding="utf-8")
         self._load()
         self.assertEqual(len(self._buffer), 1)
 

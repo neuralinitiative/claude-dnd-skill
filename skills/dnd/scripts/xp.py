@@ -192,9 +192,9 @@ def _find_char_path(campaign: str, char_name: str) -> pathlib.Path:
 
 def _read_char_state(path: pathlib.Path) -> tuple[int, int]:
     """Read current XP and level from a character file. Returns (xp, level)."""
-    text = path.read_text()
-    xp_m   = re.search(r"\*\*XP:\*\*\s*(\d+)", text)
-    level_m = re.search(r"\*\*Level:\*\*\s*(\d+)", text)
+    text = path.read_text(encoding="utf-8")
+    xp_m   = re.search(r"\*\*(?:XP|经验|经验值):\*\*\s*(\d+)", text)
+    level_m = re.search(r"\*\*(?:Level|等级):\*\*\s*(\d+)", text)
     xp    = int(xp_m.group(1))    if xp_m    else 0
     level = int(level_m.group(1)) if level_m else 1
     return xp, level
@@ -202,25 +202,32 @@ def _read_char_state(path: pathlib.Path) -> tuple[int, int]:
 
 def _write_char_xp(path: pathlib.Path, new_xp: int, current_level: int) -> bool:
     """Update XP field in character file. Returns True if level-up threshold crossed."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     next_lvl = _next_level_xp(current_level)
     leveled = new_xp >= next_lvl
 
     if leveled:
         new_level = current_level + 1
-        new_next  = _next_level_xp(new_level)
-        replacement = f"**XP:** {new_xp} / {new_next} ⚠ LEVEL UP PENDING (Level {new_level})"
+        next_lvl   = _next_level_xp(new_level)
+        suffix = f" ⚠ LEVEL UP PENDING (Level {new_level})"
     else:
-        replacement = f"**XP:** {new_xp} / {next_lvl}"
+        suffix = ""
 
-    # Replace the XP field (handles plain, level-up-pending, and pipe-delimited variants)
+    # Replace the XP field, preserving the header style (XP / 经验 / 经验值).
+    # Handles plain, level-up-pending, and pipe-delimited variants.
+    def _repl(m: re.Match) -> str:
+        return f"**{m.group(1)}:** {new_xp} / {next_lvl}" + suffix
     updated = re.sub(
-        r"\*\*XP:\*\*\s*\d+\s*/\s*\d+[^\n|]*",
-        replacement,
+        r"\*\*(XP|经验|经验值):\*\*\s*(?:\d+)?\s*/\s*\d+[^\n|]*",
+        _repl,
         text,
         count=1,
     )
-    path.write_text(updated)
+    if updated == text:
+        # 模板初始卡是 "**XP:** / 2700"（斜杠前为空）——正则失配会静默不写，
+        # 必须显式告警而不是假装发奖成功。
+        print(f"xp.py: 警告 — 未找到 {path.name} 的 XP 字段（{new_xp} 未写入）", file=sys.stderr)
+    path.write_text(updated, encoding="utf-8")
     return leveled
 
 

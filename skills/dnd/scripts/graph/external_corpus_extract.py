@@ -66,7 +66,7 @@ def call_haiku(prompt: str, system: str, timeout_sec: int = 600) -> str:
             "--system-prompt", system,
             prompt,
         ],
-        capture_output=True, text=True, timeout=timeout_sec,
+        capture_output=True, encoding="utf-8", text=True, timeout=timeout_sec,
     )
     if result.returncode != 0:
         sys.stderr.write(f"[haiku] returned {result.returncode}: {result.stderr[:300]}\n")
@@ -103,7 +103,7 @@ def load_posts(corpus_dir: pathlib.Path, top_n: int) -> list:
     for md in corpus_dir.rglob("*.md"):
         if md.name == "_summary.json":
             continue
-        text = md.read_text()
+        text = md.read_text(encoding="utf-8", errors="replace")
         words = len(text.split())
         # Extract post_id from header
         m = re.search(r"\*\*Post ID:\*\*\s+(\S+)", text)
@@ -201,7 +201,8 @@ def main():
     }
 
     out_path = args.out.expanduser()
-    out_path.write_text(json.dumps(output, indent=2))
+    out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False),
+                        encoding="utf-8")
     print(f"[done] {out_path}")
 
     # Summary to stdout

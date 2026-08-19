@@ -33,12 +33,17 @@ class CorpusCheckTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        # 保存外层原值，tearDown 恢复而非 pop（pop 会破坏 pytest 外层隔离环境）
+        self._saved_campaign_root = os.environ.get("DND_CAMPAIGN_ROOT")
         os.environ["DND_CAMPAIGN_ROOT"] = self.tmp
         self.camp = pathlib.Path(self.tmp) / "campaigns" / "c"
         self.camp.mkdir(parents=True)
 
     def tearDown(self):
-        os.environ.pop("DND_CAMPAIGN_ROOT", None)
+        if self._saved_campaign_root is None:
+            os.environ.pop("DND_CAMPAIGN_ROOT", None)
+        else:
+            os.environ["DND_CAMPAIGN_ROOT"] = self._saved_campaign_root
 
     def _corpus(self, ids, indexed=None, with_arc=True):
         indexed = ids if indexed is None else indexed

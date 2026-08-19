@@ -31,6 +31,14 @@ import os
 import sys
 from pathlib import Path
 
+# Windows 中文环境修复：默认按系统代码页（cp936/GBK）处理管道 IO，
+# 会让中文乱码或直接崩 —— 强制 UTF-8。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 def _resolve_campaign_root() -> Path:
     """Mirror paths.py logic without importing the skill (this script is
@@ -50,7 +58,7 @@ def main() -> int:
     src.add_argument("--file", help="Path to a file containing the JSON list")
     args = p.parse_args()
 
-    raw = args.json if args.json is not None else open(args.file).read()
+    raw = args.json if args.json is not None else open(args.file, encoding="utf-8").read()
     try:
         entries = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -84,8 +92,8 @@ def main() -> int:
 
     # Atomic write: temp file + rename
     tmp = target.with_suffix(".json.tmp")
-    with open(tmp, "w") as f:
-        json.dump(cleaned, f, indent=2)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, indent=2, ensure_ascii=False)
         f.flush()
         try:
             os.fsync(f.fileno())

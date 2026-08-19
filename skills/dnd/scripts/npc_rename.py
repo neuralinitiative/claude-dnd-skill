@@ -45,6 +45,13 @@ import sys
 from paths import find_campaign, characters_dir, _root
 from name_registry import slug, all_taken_slugs, add as registry_add, retire as registry_retire
 
+# Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 # ── Embedded fantasy-name corpus ──────────────────────────────────────────
 # 80 first × 60 last = 4800 unique combinations. Sourced from common public-
@@ -184,7 +191,7 @@ def find_hits(camp_dir: pathlib.Path, old: str,
     hits: dict[pathlib.Path, list[tuple[int, str]]] = {}
     for f in _files_to_scan(camp_dir, include_archive):
         try:
-            text = f.read_text(errors="replace")
+            text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         matches: list[tuple[int, str]] = []
@@ -211,7 +218,7 @@ def apply_text_rename(path: pathlib.Path, old: str, new: str) -> int:
     accidentally double-replace inside an already-substituted string.
     Returns total replacement count across all variants.
     """
-    text = path.read_text(errors="replace")
+    text = path.read_text(encoding="utf-8", errors="replace")
     total = 0
 
     old_full = old
@@ -228,7 +235,7 @@ def apply_text_rename(path: pathlib.Path, old: str, new: str) -> int:
         total += n
 
     if total > 0:
-        path.write_text(text)
+        path.write_text(text, encoding="utf-8")
     return total
 
 
@@ -241,8 +248,8 @@ def apply_graph_rename(graph_path: pathlib.Path, old: str, new: str) -> bool:
     if not graph_path.exists():
         return False
     try:
-        data = json.loads(graph_path.read_text())
-    except json.JSONDecodeError:
+        data = json.loads(graph_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return False
     old_slug = slug(old)
     new_slug = slug(new)
@@ -267,7 +274,8 @@ def apply_graph_rename(graph_path: pathlib.Path, old: str, new: str) -> bool:
             if edge.get(k) in id_remap:
                 edge[k] = id_remap[edge[k]]
     if renamed:
-        graph_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        graph_path.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                              encoding="utf-8")
     return renamed
 
 
@@ -277,14 +285,14 @@ def add_archive_audit_note(camp_dir: pathlib.Path, old: str, new: str,
     archive = camp_dir / "session-log-archive.md"
     if not archive.exists():
         return False
-    text = archive.read_text(errors="replace")
+    text = archive.read_text(encoding="utf-8", errors="replace")
     today = datetime.date.today().isoformat()
     note = (f"<!-- rename audit {today}: '{old}' renamed to '{new}' "
             f"at S{session}; historical entries below preserve the original name -->\n")
     if note.split(": ", 1)[1].split(" at S")[0] in text:
         # Already noted — don't double-note
         return False
-    archive.write_text(note + text)
+    archive.write_text(note + text, encoding="utf-8")
     return True
 
 
@@ -295,7 +303,7 @@ def _read_session_count(camp_dir: pathlib.Path) -> int:
     if not state.exists():
         return 0
     m = re.search(r"\*\*Session count:\*\*\s*(\d+)",
-                  state.read_text(errors="replace"))
+                  state.read_text(encoding="utf-8", errors="replace"))
     return int(m.group(1)) if m else 0
 
 
@@ -369,7 +377,7 @@ def main() -> int:
     g = camp_dir / "graph.json"
     if g.exists():
         try:
-            data = json.loads(g.read_text())
+            data = json.loads(g.read_text(encoding="utf-8"))
             graph_match = any(n.get("name") == args.old for n in data.get("nodes", []))
             if graph_match:
                 print(f"  graph.json: 1 node will be renamed (edges preserved)")

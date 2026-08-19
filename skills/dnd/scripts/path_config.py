@@ -65,7 +65,7 @@ def _set_windows(target: pathlib.Path) -> None:
     # setx writes to the user environment in the registry; effective in new shells.
     result = subprocess.run(
         ["setx", "DND_CAMPAIGN_ROOT", str(target)],
-        capture_output=True, text=True,
+        capture_output=True, encoding="utf-8", text=True,
     )
     if result.returncode != 0:
         sys.stderr.write(result.stderr or "setx failed\n")
@@ -78,13 +78,13 @@ def _set_windows(target: pathlib.Path) -> None:
 def _set_unix(target: pathlib.Path) -> None:
     rc = _shellrc()
     line = f'export DND_CAMPAIGN_ROOT="{target}"'
-    existing = rc.read_text() if rc.exists() else ""
+    existing = rc.read_text(encoding="utf-8", errors="replace") if rc.exists() else ""
     if EXPORT_RE.search(existing):
         new_text = EXPORT_RE.sub(line + "\n", existing)
     else:
         sep = "" if existing.endswith("\n") or not existing else "\n"
         new_text = f"{existing}{sep}{line}\n"
-    rc.write_text(new_text)
+    rc.write_text(new_text, encoding="utf-8")
     print(f"Set DND_CAMPAIGN_ROOT={target}")
     print(f"Persisted to {rc}")
     print(f'Run: export DND_CAMPAIGN_ROOT="{target}"  (or open a new shell)')
@@ -103,7 +103,7 @@ def _reset_windows() -> None:
     # `setx VAR ""` leaves an empty value; use reg delete to remove entirely.
     result = subprocess.run(
         ["reg", "delete", "HKCU\\Environment", "/F", "/V", "DND_CAMPAIGN_ROOT"],
-        capture_output=True, text=True,
+        capture_output=True, encoding="utf-8", text=True,
     )
     if result.returncode == 0:
         print("Removed DND_CAMPAIGN_ROOT from user environment.")
@@ -118,13 +118,13 @@ def _reset_unix() -> None:
     if not rc.exists():
         print(f"No persisted value (no {rc}).")
         return
-    text = rc.read_text()
+    text = rc.read_text(encoding="utf-8", errors="replace")
     if not EXPORT_RE.search(text):
         print(f"No DND_CAMPAIGN_ROOT line found in {rc}.")
         return
     cleaned = EXPORT_RE.sub("", text)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    rc.write_text(cleaned)
+    rc.write_text(cleaned, encoding="utf-8")
     print(f"Removed DND_CAMPAIGN_ROOT from {rc}.")
     print("Run: unset DND_CAMPAIGN_ROOT  (or open a new shell)")
 

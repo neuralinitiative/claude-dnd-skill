@@ -63,12 +63,19 @@ import ssl
 import time
 import urllib.request
 
+# Windows 中文环境修复：Python 默认按系统代码页（GBK）解码 stdin，
+# 而 heredoc/管道传入的是 UTF-8 字节 —— 强制 UTF-8，避免中文叙事乱码。
+for _stream in (sys.stdin, sys.stdout):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 _DISPLAY_DIR = os.path.dirname(os.path.abspath(__file__))
 if _DISPLAY_DIR not in sys.path:
     sys.path.insert(0, _DISPLAY_DIR)
 from runtime_paths import rt          # writable runtime dir (update-safe)
 _SCHEME_FILE = os.path.join(_DISPLAY_DIR, ".scheme")   # launch marker → code dir
-_SCHEME = open(_SCHEME_FILE).read().strip() if os.path.exists(_SCHEME_FILE) else "http"
+_SCHEME = open(_SCHEME_FILE, encoding="utf-8").read().strip() if os.path.exists(_SCHEME_FILE) else "http"
 BASE_URL    = f"{_SCHEME}://localhost:5001"
 FLASK_URL   = f"{BASE_URL}/chunk"
 STATS_URL   = f"{BASE_URL}/stats"
@@ -95,7 +102,7 @@ else:
 
 def _read_token() -> str:
     try:
-        return open(TOKEN_FILE).read().strip()
+        return open(TOKEN_FILE, encoding="utf-8").read().strip()
     except FileNotFoundError:
         return ""
 
@@ -553,8 +560,14 @@ def main() -> None:
             return
 
     _has_content_flag = bool(args.player or args.npc or args.dice or args.tutor or args.action)
+    _award_only = bool(args.inspiration_award or args.inspiration_spend
+                       or args.milestone_award or args.milestone_spend or args.xp_award)
     if _has_content_flag:
         text = sys.stdin.read()
+    elif _award_only:
+        # Award-only send: no narration body required. Read stdin only when
+        # piped (heredoc), so bare calls like --inspiration-award don't block.
+        text = "" if sys.stdin.isatty() else sys.stdin.read()
     else:
         text = "" if sys.stdin.isatty() else sys.stdin.read()
     token = _read_token()

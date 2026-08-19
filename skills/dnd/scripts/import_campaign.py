@@ -28,6 +28,13 @@ import re
 import subprocess
 import textwrap
 
+# This script prints full module text (often Chinese) to stdout. Without this,
+# a GBK console/pipe raises UnicodeEncodeError on the first non-ASCII line.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 CHUNK_WORDS = 4000  # words per chunk for large sources
 
 
@@ -140,7 +147,7 @@ def extract_pdf(path: str) -> str:
     try:
         result = subprocess.run(
             ["pdftotext", path, "-"],
-            capture_output=True, text=True, timeout=60
+            capture_output=True, encoding="utf-8", text=True, timeout=60
         )
         if result.returncode == 0 and result.stdout.strip():
             if not have_fitz:

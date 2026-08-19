@@ -18,7 +18,7 @@ class VerbTableSeedTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.doc = yaml.safe_load(SEED.read_text())
+        cls.doc = yaml.safe_load(SEED.read_text(encoding="utf-8"))
 
     def test_yaml_parses(self):
         self.assertIsInstance(self.doc, dict)

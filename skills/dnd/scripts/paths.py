@@ -30,6 +30,14 @@ import pathlib
 import shutil
 import sys
 
+# Windows 中文环境修复：默认按系统代码页（cp936/GBK）处理管道 IO，
+# 会让中文乱码或直接崩。每个脚本都会 import 本模块，在此统一强制 UTF-8。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 _DEFAULT_ROOT = pathlib.Path("~/.claude/dnd").expanduser()
 
 
@@ -174,7 +182,7 @@ def campaign_ruleset(name: str) -> str:
     if not state.exists():
         return DEFAULT_RULESET
     try:
-        text = state.read_text(errors="replace")
+        text = state.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return DEFAULT_RULESET
     m = _RULESET_PAT.search(text)

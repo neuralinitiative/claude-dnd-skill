@@ -106,7 +106,7 @@ def _load_ruleset(ruleset: str) -> None:
     srd_file = _srd_path_for(ruleset)
 
     if os.path.exists(srd_file):
-        with open(srd_file) as f:
+        with open(srd_file, encoding="utf-8") as f:
             raw = json.load(f)
         for k, v in raw.items():
             if k == "_meta":
@@ -117,7 +117,7 @@ def _load_ruleset(ruleset: str) -> None:
     # Merge supplemental (non-SRD content) — adds without overwriting SRD entries
     supp_file = _supp_path_for(ruleset)
     if os.path.exists(supp_file):
-        with open(supp_file) as f:
+        with open(supp_file, encoding="utf-8") as f:
             supp = json.load(f)
         for k, v in supp.items():
             if k == "_meta" or not isinstance(v, list):

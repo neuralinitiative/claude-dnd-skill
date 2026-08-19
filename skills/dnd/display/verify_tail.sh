@@ -41,7 +41,7 @@ python3 - "$TAIL" <<'PY'
 import json, sys
 path = sys.argv[1]
 try:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 except Exception as e:
     print(f"verify_tail.sh: {path} — UNPARSEABLE: {e}")

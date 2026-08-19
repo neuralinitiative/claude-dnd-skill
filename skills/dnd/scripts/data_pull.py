@@ -55,14 +55,14 @@ TARGETS = [
 
 def _load_meta() -> dict:
     try:
-        with open(META_FILE) as f:
+        with open(META_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
 def _save_meta(meta: dict) -> None:
-    with open(META_FILE, "w") as f:
+    with open(META_FILE, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
 

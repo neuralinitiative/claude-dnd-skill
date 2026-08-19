@@ -44,6 +44,13 @@ from paths import (  # noqa: E402
     find_campaign,
 )
 
+# Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 HEADER_LINE_PREFIX = "**Created:**"
 RULESET_TOKEN = "**Ruleset:**"
@@ -91,7 +98,7 @@ def cmd_check(campaign: str) -> int:
     if not state.exists():
         print(f"[migrate_ruleset] No state.md at {state}", file=sys.stderr)
         return 2
-    text = state.read_text(errors="replace")
+    text = state.read_text(encoding="utf-8", errors="replace")
     if _has_ruleset_field(text):
         print("migrated")
         return 0
@@ -112,7 +119,7 @@ def cmd_migrate(campaign: str, ruleset: str, assume_yes: bool) -> int:
         print(f"[migrate_ruleset] No state.md at {state}", file=sys.stderr)
         return 2
 
-    text = state.read_text(errors="replace")
+    text = state.read_text(encoding="utf-8", errors="replace")
     if _has_ruleset_field(text):
         # Idempotent path — also surface the actual declared ruleset
         declared = campaign_ruleset(campaign)
@@ -136,7 +143,7 @@ def cmd_migrate(campaign: str, ruleset: str, assume_yes: bool) -> int:
 
     bak = _backup(state)
     new_text = _inject_ruleset(text, ruleset)
-    state.write_text(new_text)
+    state.write_text(new_text, encoding="utf-8")
     print(
         f"[migrate_ruleset] OK — '{campaign}' stamped as ruleset {ruleset}.\n"
         f"  Backup: {bak}\n"
