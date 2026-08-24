@@ -9,6 +9,10 @@
 # HTTP is the default. Guests and new devices connect instantly with no setup.
 # TLS adds encryption but requires a one-time certificate install on each device.
 
+# Force UTF-8 for every python this script spawns (display app, RT resolver,
+# http.server) — on non-English Windows the default codepage mangles text.
+export PYTHONUTF8=1
+
 DISPLAY_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="$DISPLAY_DIR/app.log"               # process log — recreated each launch
 PID_FILE="$DISPLAY_DIR/app.pid"          # process pid  — recreated each launch

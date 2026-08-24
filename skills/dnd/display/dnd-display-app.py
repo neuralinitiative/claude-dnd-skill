@@ -411,20 +411,6 @@ def _token_ok() -> bool:
 
 
 app = Flask(__name__)
-# ── battle-engine blueprint (M2)
-if os.environ.get("BATTLE_ENGINE_DIR"):
-    _eng = os.environ["BATTLE_ENGINE_DIR"]
-    if os.path.isdir(_eng) and _eng not in sys.path:
-        sys.path.insert(0, _eng)
-    try:
-        from battle.web.bp import battle_bp
-        app.register_blueprint(battle_bp)
-        app.config["BATTLE_TOKEN"] = _lan_token or ""
-        app.config["BATTLE_CAMPAIGN_FILE"] = CAMP_FILE
-        print("battle-engine 蓝图已挂载（M2）")
-    except ImportError as _e:
-        print(f"!! battle-engine 蓝图挂载失败（忽略）: {_e}")
-# ── end battle-engine mount (M2)
 
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 CORS(app)
@@ -874,8 +860,9 @@ def _phone_present(char: str) -> bool:
 # ─── Text replay log ──────────────────────────────────────────────────────────
 # Stores cleaned text chunks so late-connecting browsers can catch up.
 # Persisted to LOG_FILE so it survives Flask restarts (Chromecast reconnects, new sessions).
-# 2026-08-18 玩家明令「正文全量保留」：上限 60 → 2000，启动全量载入（_load_log），
-# 使跨场次的正文全量可恢复、可双格式归档。插件更新后须重查此三处（见 dnd-end-frontend-archive 记忆）。
+# Full body retention (player requirement, 2026-08-18): cap raised 60 → 2000 with
+# full reload at startup (_load_log), so cross-session body text stays recoverable
+# and archivable in both formats. On plugin updates, re-check these three spots.
 _text_log: deque = deque(maxlen=2000)
 _text_log_lock = threading.Lock()
 

@@ -33,7 +33,8 @@ class CorpusCheckTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        # 保存外层原值，tearDown 恢复而非 pop（pop 会破坏 pytest 外层隔离环境）
+        # Preserve the outer value; tearDown restores rather than pops (pop
+        # would break pytest's outer isolation).
         self._saved_campaign_root = os.environ.get("DND_CAMPAIGN_ROOT")
         os.environ["DND_CAMPAIGN_ROOT"] = self.tmp
         self.camp = pathlib.Path(self.tmp) / "campaigns" / "c"

@@ -71,7 +71,8 @@ def _load(campaign: str) -> dict:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, UnicodeDecodeError):
-        # 损坏/历史 GBK 文件：按空图处理而不是当场崩溃（改名/备份流程可继续）
+        # Corrupt or legacy GBK files: treat as an empty graph rather than
+        # crashing (so rename/backup flows can continue).
         return {"version": 1, "nodes": [], "edges": []}
     data.setdefault("version", 1)
     data.setdefault("nodes", [])

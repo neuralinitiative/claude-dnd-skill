@@ -63,8 +63,8 @@ import ssl
 import time
 import urllib.request
 
-# Windows 中文环境修复：Python 默认按系统代码页（GBK）解码 stdin，
-# 而 heredoc/管道传入的是 UTF-8 字节 —— 强制 UTF-8，避免中文叙事乱码。
+# Windows CJK fix: Python decodes stdin via the system codepage (GBK), but
+# heredocs/pipes deliver UTF-8 bytes — force UTF-8 to keep Chinese narration intact.
 for _stream in (sys.stdin, sys.stdout):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")

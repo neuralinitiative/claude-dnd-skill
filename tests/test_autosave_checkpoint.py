@@ -71,8 +71,9 @@ class FlagAndMarkerTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        # 保存外层原值（pytest 可能已设了隔离用的 DND_RUNTIME_DIR），tearDown 恢复而非 pop——
-        # pop 会连带删掉外层隔离，污染后续测试的真实数据路径。
+        # Preserve the outer value (pytest may already have set DND_RUNTIME_DIR
+        # for isolation); tearDown restores rather than pops — popping would
+        # delete the outer isolation and pollute the real data path.
         self._saved_campaign_root = os.environ.get("DND_CAMPAIGN_ROOT")
         self._saved_runtime_dir = os.environ.get("DND_RUNTIME_DIR")
         os.environ["DND_CAMPAIGN_ROOT"] = self.tmp

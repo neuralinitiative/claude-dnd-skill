@@ -224,9 +224,10 @@ def _write_char_xp(path: pathlib.Path, new_xp: int, current_level: int) -> bool:
         count=1,
     )
     if updated == text:
-        # 模板初始卡是 "**XP:** / 2700"（斜杠前为空）——正则失配会静默不写，
-        # 必须显式告警而不是假装发奖成功。
-        print(f"xp.py: 警告 — 未找到 {path.name} 的 XP 字段（{new_xp} 未写入）", file=sys.stderr)
+        # Fresh template sheets hold "**XP:** / 2700" (empty before the slash) — a
+        # regex mismatch would silently skip writing; warn explicitly instead of
+        # pretending the award succeeded.
+        print(f"xp.py: warning — no XP field found in {path.name} ({new_xp} not written)", file=sys.stderr)
     path.write_text(updated, encoding="utf-8")
     return leveled
 

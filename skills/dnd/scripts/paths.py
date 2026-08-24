@@ -30,8 +30,8 @@ import pathlib
 import shutil
 import sys
 
-# Windows 中文环境修复：默认按系统代码页（cp936/GBK）处理管道 IO，
-# 会让中文乱码或直接崩。每个脚本都会 import 本模块，在此统一强制 UTF-8。
+# Windows CJK fix: piped stdout defaults to the system codepage (cp936/GBK).
+# Every script imports this module, so UTF-8 is forced once here.
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")

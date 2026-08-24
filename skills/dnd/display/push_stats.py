@@ -76,8 +76,8 @@ import ssl
 import time
 import urllib.request
 
-# Windows 中文环境修复：默认按系统代码页（cp936/GBK）处理管道 IO，
-# 会让中文乱码或直接崩 —— 强制 UTF-8。
+# Windows CJK fix: piped stdout defaults to the system codepage (cp936/GBK),
+# which garbles or crashes on Chinese — force UTF-8.
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
