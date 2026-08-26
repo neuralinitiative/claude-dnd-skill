@@ -44,6 +44,7 @@ import re
 import sys
 
 from paths import campaigns_dir, characters_dir, _root
+from utf8io import read_text, TextDecodeError
 
 # Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
 try:
@@ -79,8 +80,11 @@ def _load() -> dict:
     if not p.exists():
         return {"version": 1, "updated": _today(), "entries": {}}
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        # Lossless read: a GBK registry from the pre-sweep plugin decodes
+        # cleanly and migrates on the next save; anything undecodable falls
+        # back to the loud "starting fresh" path below.
+        return json.loads(read_text(p))
+    except (TextDecodeError, json.JSONDecodeError):
         sys.stderr.write(f"name_registry: {p} is corrupt; starting fresh\n")
         return {"version": 1, "updated": _today(), "entries": {}}
 

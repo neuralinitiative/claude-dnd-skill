@@ -296,7 +296,7 @@ def main():
                 output, elapsed, err = "", 0, str(e)
             out_subdir = cond + args.out_suffix
             (OUT_DIR / out_subdir / f"run_{i:02d}.txt").write_text(
-                output or f"[ERROR: {err}]")
+                output or f"[ERROR: {err}]", encoding="utf-8")
             score = score_run(output) if output else {"error": err}
             results.append({"condition": cond, "run": i, "elapsed": elapsed,
                             "score": score, "output_chars": len(output)})
@@ -307,7 +307,8 @@ def main():
                   file=sys.stderr)
 
     pathlib.Path("/tmp/replay-summary.json").write_text(
-        json.dumps({"results": results, "n_per_condition": args.n}, indent=2))
+        json.dumps({"results": results, "n_per_condition": args.n}, indent=2),
+        encoding="utf-8")
 
     # Summarize
     print("\n=== summary ===")

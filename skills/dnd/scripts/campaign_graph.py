@@ -49,12 +49,15 @@ Subcommands:
   subgraph       --seed ID [--seed ID ...] [--hops H] [--at-session N]
 """
 import argparse
+import datetime
 import json
 import pathlib
+import shutil
 import sys
 from typing import Optional
 
 from paths import find_campaign
+from utf8io import read_text, TextDecodeError
 
 
 # -------- IO --------
@@ -63,16 +66,31 @@ def _graph_path(campaign: str):
     return find_campaign(campaign) / "graph.json"
 
 
+def _backup_corrupt(p: pathlib.Path) -> pathlib.Path:
+    """Copy an unreadable graph aside before any write-back can flatten it."""
+    ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = p.with_name(f"graph.json.corrupt-{ts}")
+    shutil.copy2(p, target)
+    return target
+
+
 def _load(campaign: str) -> dict:
     p = _graph_path(campaign)
     if not p.exists():
         return {"version": 1, "nodes": [], "edges": []}
     try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        # Corrupt or legacy GBK files: treat as an empty graph rather than
-        # crashing (so rename/backup flows can continue).
+        # Lossless read: a legacy-GBK graph.json (Chinese node names written
+        # by the pre-sweep plugin) decodes cleanly and migrates on next save.
+        data = json.loads(read_text(p))
+    except (TextDecodeError, json.JSONDecodeError):
+        # Corrupt or undecodable: back it up FIRST, then continue with an
+        # empty graph — otherwise the next _save silently flattens the file.
+        backup = _backup_corrupt(p)
+        print(
+            f"[campaign_graph] {p}: unreadable (corrupt JSON or unknown encoding) — "
+            f"backed up to {backup}; continuing with an empty graph",
+            file=sys.stderr,
+        )
         return {"version": 1, "nodes": [], "edges": []}
     data.setdefault("version", 1)
     data.setdefault("nodes", [])

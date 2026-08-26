@@ -17,6 +17,8 @@ import re
 import subprocess
 import sys
 
+from utf8io import read_text, TextDecodeError
+
 from paths import _root, campaigns_dir, characters_dir
 
 SHELLRC_CANDIDATES = [
@@ -78,7 +80,13 @@ def _set_windows(target: pathlib.Path) -> None:
 def _set_unix(target: pathlib.Path) -> None:
     rc = _shellrc()
     line = f'export DND_CAMPAIGN_ROOT="{target}"'
-    existing = rc.read_text(encoding="utf-8", errors="replace") if rc.exists() else ""
+    try:
+        # Lossless read: the user's shell rc may predate the UTF-8 sweep and
+        # hold GBK bytes — transcode once instead of writing U+FFFD into it.
+        existing = read_text(rc) if rc.exists() else ""
+    except (OSError, TextDecodeError) as e:
+        sys.stderr.write(f"[path_config] {rc}: {e} — refusing to modify shell rc\n")
+        raise SystemExit(1)
     if EXPORT_RE.search(existing):
         new_text = EXPORT_RE.sub(line + "\n", existing)
     else:
@@ -118,7 +126,11 @@ def _reset_unix() -> None:
     if not rc.exists():
         print(f"No persisted value (no {rc}).")
         return
-    text = rc.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = read_text(rc)
+    except (OSError, TextDecodeError) as e:
+        sys.stderr.write(f"[path_config] {rc}: {e} — refusing to modify shell rc\n")
+        raise SystemExit(1)
     if not EXPORT_RE.search(text):
         print(f"No DND_CAMPAIGN_ROOT line found in {rc}.")
         return

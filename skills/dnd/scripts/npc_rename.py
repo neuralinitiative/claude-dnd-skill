@@ -44,6 +44,7 @@ import sys
 
 from paths import find_campaign, characters_dir, _root
 from name_registry import slug, all_taken_slugs, add as registry_add, retire as registry_retire
+from utf8io import read_text, TextDecodeError
 
 # Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
 try:
@@ -218,7 +219,9 @@ def apply_text_rename(path: pathlib.Path, old: str, new: str) -> int:
     accidentally double-replace inside an already-substituted string.
     Returns total replacement count across all variants.
     """
-    text = path.read_text(encoding="utf-8", errors="replace")
+    # Lossless read: legacy-GBK files transcode once to UTF-8 instead of
+    # round-tripping U+FFFD back into the file on write.
+    text = read_text(path)
     total = 0
 
     old_full = old
@@ -285,7 +288,13 @@ def add_archive_audit_note(camp_dir: pathlib.Path, old: str, new: str,
     archive = camp_dir / "session-log-archive.md"
     if not archive.exists():
         return False
-    text = archive.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = read_text(archive)
+    except (OSError, TextDecodeError) as e:
+        # Refuse rather than prepend a note onto a file whose decode would
+        # already have replaced every non-ASCII byte with U+FFFD.
+        print(f"    session-log-archive.md: {e} — audit note skipped", file=sys.stderr)
+        return False
     today = datetime.date.today().isoformat()
     note = (f"<!-- rename audit {today}: '{old}' renamed to '{new}' "
             f"at S{session}; historical entries below preserve the original name -->\n")
@@ -407,7 +416,13 @@ def main() -> int:
     # Apply text renames
     total_replacements = 0
     for f in list(hits.keys()):
-        n = apply_text_rename(f, args.old, new_name)
+        try:
+            n = apply_text_rename(f, args.old, new_name)
+        except (OSError, TextDecodeError) as e:
+            # Backup is already taken above; refuse this file rather than
+            # write U+FFFD back into it, and keep going with the rest.
+            print(f"    {f.name}: {e} — skipped (unreadable encoding)", file=sys.stderr)
+            continue
         print(f"    {f.name}: {n} replacements")
         total_replacements += n
 

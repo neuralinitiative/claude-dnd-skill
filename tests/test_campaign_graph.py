@@ -59,6 +59,47 @@ class GraphSubcommandTests(unittest.TestCase):
             return {"nodes": [], "edges": []}
         return json.loads(gp.read_text(encoding="utf-8"))
 
+    # ── legacy-GBK / corrupt graph.json handling ────────────────────────────
+
+    def test_legacy_gbk_graph_migrates(self):
+        """A graph.json written in GBK by the pre-sweep plugin (Chinese node
+        names) decodes losslessly and is re-saved as UTF-8 on the next write —
+        a one-time migration, not a flatten."""
+        gp = self.camp_dir / "graph.json"
+        gp.write_bytes(
+            json.dumps({"version": 1, "nodes": [
+                {"id": "npc_aldric", "type": "npc", "name": "阿尔德里克"}
+            ], "edges": []}, ensure_ascii=False).encode("gbk")
+        )
+        rc, out, err = _run(
+            ["add-node", "--campaign", self.campaign,
+             "--type", "npc", "--name", "Mira"], env_overrides=self.env
+        )
+        self.assertEqual(rc, 0, msg=err)
+        data = self._graph_json()  # parses as UTF-8, so the file migrated
+        names = {n["name"] for n in data["nodes"]}
+        self.assertIn("阿尔德里克", names)
+        self.assertIn("Mira", names)
+
+    def test_corrupt_graph_backed_up_before_continue(self):
+        """An undecodable graph.json is copied aside BEFORE the flow continues,
+        so the next save can't silently flatten the original bytes."""
+        gp = self.camp_dir / "graph.json"
+        raw = b"\xff\xfe\x00 not json at all \x80\x81"
+        gp.write_bytes(raw)
+        rc, out, err = _run(
+            ["add-node", "--campaign", self.campaign,
+             "--type", "npc", "--name", "Mira"], env_overrides=self.env
+        )
+        self.assertEqual(rc, 0, msg=err)
+        self.assertIn("backed up", err)
+        backups = sorted(self.camp_dir.glob("graph.json.corrupt-*"))
+        self.assertEqual(len(backups), 1,
+                         msg="corrupt graph should be backed up before continuing")
+        self.assertEqual(backups[0].read_bytes(), raw)
+        data = self._graph_json()
+        self.assertEqual(len(data["nodes"]), 1)
+
     # ── add-node + add-edge + list ─────────────────────────────────────────
 
     def test_add_node_creates_graph_json(self):

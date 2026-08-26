@@ -56,6 +56,7 @@ except Exception:
     _SRD_AVAILABLE = False
 
 from paths import find_campaign as _find_campaign
+from utf8io import read_text as _read_text
 
 # Audio module — degrades silently if numpy not installed
 _AUDIO_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1831,7 +1832,10 @@ def _write_narrator_voice(voice: str) -> bool:
         return False
     try:
         state = _find_campaign(name) / "state.md"
-        text = state.read_text(encoding="utf-8", errors="replace") if state.exists() else ""
+        # utf8io transcodes legacy-GBK state.md losslessly (one-time migration);
+        # raises ValueError on anything undecodable, so we never write U+FFFD
+        # back over the file from the display UI.
+        text = _read_text(state) if state.exists() else ""
     except (OSError, ValueError):
         return False
 
@@ -2547,9 +2551,11 @@ def stream():
     q.put_nowait({"scene": initial_scene})
 
     # Replay recent entries so late-connecting / reconnecting browsers catch up.
-    # Sent as a typed batch so the browser can render each item (dm/player/dice) correctly.
+    # _text_log is the durable session record (maxlen=2000); replay only the
+    # last 200 chunks — the browser renders this batch on join, not the whole
+    # log, so a late joiner isn't shown sessions 1..N rendered at them.
     with _text_log_lock:
-        recent = list(_text_log)
+        recent = list(_text_log)[-200:]
     if recent:
         q.put_nowait({"replay_batch": recent})
 

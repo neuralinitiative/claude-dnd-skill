@@ -478,10 +478,9 @@ def main() -> None:
     #      body OPTIONAL. Read stdin when piped (heredoc/pipe), skip when an
     #      interactive TTY to avoid blocking on an unattended call.
     #
-    # Award flags (--inspiration-*/--xp-*/--milestone-*) used to force text=""
-    # which silently dropped any heredoc body bundled with them. Reading piped
-    # stdin under the same isatty() gate as stat flags lets bundled narration
-    # flow through to the text-send block below.
+    # Award flags (--inspiration-*/--xp-*/--milestone-*) fall into category 2:
+    # reading piped stdin under the isatty() gate lets bundled narration flow
+    # through to the text-send block while bare award calls don't block.
     # ── Dice request (DM → phones) — broadcast + optional blocking wait ──────
     if args.dice_request:
         # Comma-split character list so the DM can address multiple players at once,
@@ -560,14 +559,8 @@ def main() -> None:
             return
 
     _has_content_flag = bool(args.player or args.npc or args.dice or args.tutor or args.action)
-    _award_only = bool(args.inspiration_award or args.inspiration_spend
-                       or args.milestone_award or args.milestone_spend or args.xp_award)
     if _has_content_flag:
         text = sys.stdin.read()
-    elif _award_only:
-        # Award-only send: no narration body required. Read stdin only when
-        # piped (heredoc), so bare calls like --inspiration-award don't block.
-        text = "" if sys.stdin.isatty() else sys.stdin.read()
     else:
         text = "" if sys.stdin.isatty() else sys.stdin.read()
     token = _read_token()

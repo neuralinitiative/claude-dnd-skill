@@ -43,6 +43,7 @@ from paths import (  # noqa: E402
     campaign_ruleset,
     find_campaign,
 )
+from utf8io import read_text, TextDecodeError  # noqa: E402
 
 # Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
 try:
@@ -119,7 +120,14 @@ def cmd_migrate(campaign: str, ruleset: str, assume_yes: bool) -> int:
         print(f"[migrate_ruleset] No state.md at {state}", file=sys.stderr)
         return 2
 
-    text = state.read_text(encoding="utf-8", errors="replace")
+    try:
+        # Lossless read: a legacy-GBK state.md transcodes once to UTF-8, which
+        # is exactly what this migration tool is for. Anything undecodable is
+        # refused loudly instead of being written back as U+FFFD.
+        text = read_text(state)
+    except (OSError, TextDecodeError) as e:
+        print(f"[migrate_ruleset] {e} — refusing to touch {state}", file=sys.stderr)
+        return 2
     if _has_ruleset_field(text):
         # Idempotent path — also surface the actual declared ruleset
         declared = campaign_ruleset(campaign)
