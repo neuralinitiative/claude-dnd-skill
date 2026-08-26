@@ -41,13 +41,13 @@ TIMEOUT     = 8.0
 
 # Match the scheme the display server is using (HTTP default, HTTPS if --tls).
 try:
-    with open(SCHEME_FILE) as f:
+    with open(SCHEME_FILE, encoding="utf-8") as f:
         _SCHEME = f.read().strip() or "http"
 except FileNotFoundError:
     _SCHEME = "http"
 _BASE       = f"{_SCHEME}://localhost:5001"
 _DICE_REQ   = f"{_BASE}/dice-request"
-_TEXT_LOG   = os.path.join(DISPLAY_DIR, "text_log.json")
+_TEXT_LOG   = os.path.join(str(_runtime_dir()), "text_log.json")
 
 _SSL_CTX: "ssl.SSLContext | None" = None
 if _SCHEME == "https":
@@ -58,7 +58,7 @@ if _SCHEME == "https":
 
 def _read_token() -> str:
     try:
-        with open(TOKEN_FILE) as f:
+        with open(TOKEN_FILE, encoding="utf-8") as f:
             return f.read().strip()
     except FileNotFoundError:
         return ""
@@ -115,7 +115,7 @@ def _find_resolved_roll(character: str, spec: str, since_ts: float) -> "dict | N
     `<character> rolls <spec>`.
     """
     try:
-        with open(_TEXT_LOG) as f:
+        with open(_TEXT_LOG, encoding="utf-8") as f:
             log = json.load(f)
     except FileNotFoundError:
         return None

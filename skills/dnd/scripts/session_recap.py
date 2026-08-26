@@ -449,7 +449,7 @@ def cmd_diff(args) -> int:
     last = rdir / "last.json"
 
     if args.before:
-        before = json.loads(pathlib.Path(args.before).expanduser().read_text())
+        before = json.loads(pathlib.Path(args.before).expanduser().read_text(encoding="utf-8"))
     else:
         if not last.exists():
             print("# no prior snapshot to diff against; run `snapshot` first",
@@ -459,7 +459,7 @@ def cmd_diff(args) -> int:
 
     live = not args.after
     if args.after:
-        after = json.loads(pathlib.Path(args.after).expanduser().read_text())
+        after = json.loads(pathlib.Path(args.after).expanduser().read_text(encoding="utf-8"))
     else:
         after = snapshot_party(campaign_dir)
 
@@ -484,8 +484,8 @@ def cmd_diff(args) -> int:
 
 
 def cmd_diff_files(args) -> int:
-    before = json.loads(pathlib.Path(args.before).expanduser().read_text())
-    after = json.loads(pathlib.Path(args.after).expanduser().read_text())
+    before = json.loads(pathlib.Path(args.before).expanduser().read_text(encoding="utf-8"))
+    after = json.loads(pathlib.Path(args.after).expanduser().read_text(encoding="utf-8"))
     changes = diff_party(before, after)
     summary = render_summary(changes)
     if args.json:

@@ -31,6 +31,14 @@ import os
 import sys
 from pathlib import Path
 
+# Windows CJK fix: piped stdout defaults to the system codepage (cp936/GBK),
+# which garbles or crashes on Chinese — force UTF-8.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 def _resolve_campaign_root() -> Path:
     """Mirror paths.py logic without importing the skill (this script is
@@ -50,7 +58,7 @@ def main() -> int:
     src.add_argument("--file", help="Path to a file containing the JSON list")
     args = p.parse_args()
 
-    raw = args.json if args.json is not None else open(args.file).read()
+    raw = args.json if args.json is not None else open(args.file, encoding="utf-8").read()
     try:
         entries = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -84,8 +92,8 @@ def main() -> int:
 
     # Atomic write: temp file + rename
     tmp = target.with_suffix(".json.tmp")
-    with open(tmp, "w") as f:
-        json.dump(cleaned, f, indent=2)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, indent=2, ensure_ascii=False)
         f.flush()
         try:
             os.fsync(f.fileno())

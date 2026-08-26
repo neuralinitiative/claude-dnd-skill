@@ -71,14 +71,25 @@ class FlagAndMarkerTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        # Preserve the outer value (pytest may already have set DND_RUNTIME_DIR
+        # for isolation); tearDown restores rather than pops — popping would
+        # delete the outer isolation and pollute the real data path.
+        self._saved_campaign_root = os.environ.get("DND_CAMPAIGN_ROOT")
+        self._saved_runtime_dir = os.environ.get("DND_RUNTIME_DIR")
         os.environ["DND_CAMPAIGN_ROOT"] = self.tmp
         os.environ["DND_RUNTIME_DIR"] = os.path.join(self.tmp, ".runtime")
         self.camp_dir = pathlib.Path(self.tmp) / "campaigns" / "test-camp"
         self.camp_dir.mkdir(parents=True)
 
     def tearDown(self):
-        os.environ.pop("DND_CAMPAIGN_ROOT", None)
-        os.environ.pop("DND_RUNTIME_DIR", None)
+        if self._saved_campaign_root is None:
+            os.environ.pop("DND_CAMPAIGN_ROOT", None)
+        else:
+            os.environ["DND_CAMPAIGN_ROOT"] = self._saved_campaign_root
+        if self._saved_runtime_dir is None:
+            os.environ.pop("DND_RUNTIME_DIR", None)
+        else:
+            os.environ["DND_RUNTIME_DIR"] = self._saved_runtime_dir
 
     def _write_state(self, flags_body):
         (self.camp_dir / "state.md").write_text(

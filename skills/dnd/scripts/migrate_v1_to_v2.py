@@ -98,7 +98,7 @@ def _say(msg: str = "") -> None:
 def _read_legacy_version() -> str:
     vf = LEGACY_SKILL / "VERSION"
     try:
-        return vf.read_text().strip() or "unknown"
+        return vf.read_text(encoding="utf-8").strip() or "unknown"
     except OSError:
         return "unknown"
 

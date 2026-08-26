@@ -1,0 +1,85 @@
+"""
+test_encoding_tree.py — tree-walk guard against bare text-mode open() calls.
+
+On Chinese Windows (cp936/GBK) a bare text-mode open() mis-decodes UTF-8 files
+and can silently corrupt data — the bug class fixed by the 2026-08 UTF-8 sweep.
+This test walks the shipped tree so the bug cannot come back through a new
+call site. The bash launchers are checked too: PYTHONUTF8=1 must be exported so
+every spawned python process is covered regardless of call-site discipline.
+
+Run from repo root:
+    python3 -m unittest tests.test_encoding_tree -v
+"""
+import pathlib
+import re
+import unittest
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+SKILL = REPO / "skills" / "dnd" if (REPO / "skills" / "dnd").is_dir() else REPO
+SCAN_ROOTS = [SKILL, REPO / "scripts", REPO / "dice-server"]
+_SKIP_DIRS = {"__pycache__", ".venv", "venv", ".git", "node_modules"}
+
+# Arguments may span lines, so each candidate is judged against a 3-line window.
+_OPEN_NO_ENC_RE = re.compile(
+    r"\bopen\s*\(\s*(?P<arg>[^,\)]+)(?P<rest>(?:(?!encoding)[^)]){0,200})\)",
+    re.S,
+)
+
+
+def _scan() -> list[str]:
+    issues = []
+    for base in SCAN_ROOTS:
+        if not base.is_dir():
+            continue
+        for f in sorted(base.rglob("*")):
+            if not f.is_file() or f.suffix not in (".py", ".sh"):
+                continue
+            if any(p in _SKIP_DIRS for p in f.parts):
+                continue
+            if "graph" in f.parts and f.name != "graph_extract_deterministic.py":
+                continue  # experimental graph/ subdir is not shipped code
+            src = f.read_text(encoding="utf-8", errors="replace")
+            lines = src.splitlines()
+            for i, line in enumerate(lines, 1):
+                window = "\n".join(lines[i - 1 : i + 3])
+                m = _OPEN_NO_ENC_RE.search(line)
+                if (
+                    m
+                    and "encoding" not in window
+                    and "rb" not in window
+                    and "wb" not in window
+                    and "os.open" not in line    # fd ops — no Python-level encoding
+                    and "fitz.open" not in line  # PyMuPDF binary open
+                ):
+                    issues.append(
+                        f"{f.relative_to(REPO)}:{i}  open() without encoding: {line.strip()[:90]}"
+                    )
+                if ("read_text(" in line or "write_text(" in line) and "encoding=" not in window:
+                    issues.append(
+                        f"{f.relative_to(REPO)}:{i}  read/write_text without encoding: {line.strip()[:90]}"
+                    )
+    return issues
+
+
+class EncodingTreeTests(unittest.TestCase):
+
+    def test_no_bare_text_mode_io(self):
+        issues = _scan()
+        self.assertEqual([], issues, "bare text-mode IO without encoding= found:\n" + "\n".join(issues))
+
+    def test_launchers_export_pythonutf8(self):
+        """Bash launchers must export PYTHONUTF8=1 so spawned python processes
+        are covered regardless of what the call sites say."""
+        for sh in ("start-display.sh", "verify_tail.sh"):
+            path = SKILL / "display" / sh
+            if not path.exists():
+                self.fail(f"expected launcher missing: {path}")
+            self.assertIn(
+                "PYTHONUTF8=1",
+                path.read_text(encoding="utf-8"),
+                f"{sh} should export PYTHONUTF8=1",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -58,7 +58,7 @@ def get_recent_display(n: int = 10) -> str:
     if not LOG_FILE.exists():
         return ""
     try:
-        data = json.loads(LOG_FILE.read_text())
+        data = json.loads(LOG_FILE.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return ""
     recent = data[-n:] if len(data) >= n else data
@@ -89,7 +89,7 @@ def get_campaign_state(campaign: str) -> str:
     state_path = _find_campaign(campaign) / "state.md"
     if not state_path.exists():
         return ""
-    text = state_path.read_text()
+    text = state_path.read_text(encoding="utf-8", errors="replace")
     parts = []
     for header in STATE_SECTIONS:
         match = re.search(
@@ -116,7 +116,7 @@ def get_graph_context(campaign: str) -> str:
     state_path = _find_campaign(campaign) / "state.md"
     if not state_path.exists():
         return ""
-    text = state_path.read_text()
+    text = state_path.read_text(encoding="utf-8", errors="replace")
     loc_match = re.search(r"^- \*\*Location:\*\*\s*(.+)$", text, re.MULTILINE)
     sess_match = re.search(r"\*\*Session count:\*\*\s*(\d+)", text)
     if not loc_match:
@@ -135,7 +135,7 @@ def get_graph_context(campaign: str) -> str:
     if sess_match:
         cmd += ["--at-session", sess_match.group(1)]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", text=True, timeout=5)
     except Exception:
         return ""
     out = (result.stdout or "").strip()
@@ -155,7 +155,7 @@ def get_arc_context(campaign: str) -> str:
     if not state_path.exists():
         return ""
 
-    text = state_path.read_text()
+    text = state_path.read_text(encoding="utf-8", errors="replace")
 
     # Extract the YAML block inside ## Campaign Arc
     arc_match = re.search(
@@ -236,7 +236,7 @@ def get_session_context(campaign: str) -> str:
     log_path = _find_campaign(campaign) / "session-log.md"
     if not log_path.exists():
         return ""
-    text = log_path.read_text()
+    text = log_path.read_text(encoding="utf-8", errors="replace")
 
     # Find all session headers — "## Session N" or "## Session N — ..."
     matches = list(re.finditer(r"^## Session \d+", text, re.MULTILINE))
@@ -304,7 +304,7 @@ def call_claude(display: str, state: str, session: str, arc: str, graph: str = "
             prompt,
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8", text=True,
         timeout=60,
     )
 
@@ -318,7 +318,7 @@ def send_tutor(text: str) -> None:
     subprocess.run(
         [sys.executable, str(SEND_PY), "--tutor"],
         input=text,
-        text=True,
+        encoding="utf-8", text=True,
         capture_output=True,
     )
 

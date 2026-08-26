@@ -59,7 +59,7 @@ PLUGIN_MODE = bool(os.environ.get("CLAUDE_PLUGIN_ROOT")) or (
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(GIT_ROOT), *args],
-        capture_output=True, text=True, check=check,
+        capture_output=True, encoding="utf-8", text=True, check=check,
     )
 
 
@@ -67,7 +67,7 @@ def _read_local_version() -> str:
     f = (GIT_ROOT or SKILL_DIR) / "VERSION"
     if not f.exists():
         return "(no VERSION file — pre-1.6 baseline)"
-    return f.read_text().strip()
+    return f.read_text(encoding="utf-8").strip()
 
 
 def _read_remote_version(branch: str) -> str:
@@ -96,7 +96,7 @@ def _plugin_local_version() -> str:
     for c in candidates:
         try:
             if c.exists():
-                return c.read_text().strip()
+                return c.read_text(encoding="utf-8").strip()
         except OSError:
             pass
     return "unknown"

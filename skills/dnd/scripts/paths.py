@@ -30,6 +30,14 @@ import pathlib
 import shutil
 import sys
 
+# Windows CJK fix: piped stdout defaults to the system codepage (cp936/GBK).
+# Every script imports this module, so UTF-8 is forced once here.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 _DEFAULT_ROOT = pathlib.Path("~/.claude/dnd").expanduser()
 
 
@@ -174,7 +182,7 @@ def campaign_ruleset(name: str) -> str:
     if not state.exists():
         return DEFAULT_RULESET
     try:
-        text = state.read_text(errors="replace")
+        text = state.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return DEFAULT_RULESET
     m = _RULESET_PAT.search(text)

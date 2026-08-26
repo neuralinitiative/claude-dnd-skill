@@ -67,8 +67,13 @@ def _load(campaign: str) -> dict:
     p = _graph_path(campaign)
     if not p.exists():
         return {"version": 1, "nodes": [], "edges": []}
-    with open(p) as f:
-        data = json.load(f)
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # Corrupt or legacy GBK files: treat as an empty graph rather than
+        # crashing (so rename/backup flows can continue).
+        return {"version": 1, "nodes": [], "edges": []}
     data.setdefault("version", 1)
     data.setdefault("nodes", [])
     data.setdefault("edges", [])
@@ -78,7 +83,7 @@ def _load(campaign: str) -> dict:
 def _save(campaign: str, data: dict) -> None:
     p = _graph_path(campaign)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as f:
+    with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -693,7 +698,7 @@ def cmd_extract(args) -> int:
         print(f"# Deterministic extraction — {len(proposals)} proposals from "
               f"{campaign_dir.name}", file=sys.stderr)
         if getattr(args, "write", None):
-            pathlib.Path(args.write).write_text(out_json)
+            pathlib.Path(args.write).write_text(out_json, encoding="utf-8")
             print(f"# wrote proposals to {args.write}", file=sys.stderr)
         else:
             print(out_json)
@@ -704,9 +709,9 @@ def cmd_extract(args) -> int:
 
     sources = []
     if archive.exists():
-        sources.append((archive.name, archive.read_text()))
+        sources.append((archive.name, archive.read_text(encoding="utf-8", errors="replace")))
     if log.exists():
-        sources.append((log.name, log.read_text()))
+        sources.append((log.name, log.read_text(encoding="utf-8", errors="replace")))
     if not sources:
         print(f"no session-log files in {campaign_dir}", file=sys.stderr)
         return 1
@@ -721,7 +726,7 @@ def cmd_extract(args) -> int:
             "--system-prompt", _EXTRACTION_SYSTEM,
             prompt,
         ],
-        capture_output=True, text=True, timeout=420,
+        capture_output=True, encoding="utf-8", text=True, timeout=420,
     )
     if result.returncode != 0:
         print(f"claude returned {result.returncode}: {result.stderr}", file=sys.stderr)
@@ -764,7 +769,8 @@ def cmd_extract(args) -> int:
 
     if args.write:
         out = pathlib.Path(args.write).expanduser()
-        out.write_text(json.dumps(deduped, indent=2))
+        out.write_text(json.dumps(deduped, indent=2, ensure_ascii=False),
+                       encoding="utf-8")
         print(f"# wrote {len(deduped)} proposals to {out}", file=sys.stderr)
 
     return 0
@@ -776,7 +782,7 @@ def cmd_extract_apply(args) -> int:
     if not proposals_path.exists():
         print(f"proposals file not found: {proposals_path}", file=sys.stderr)
         return 1
-    proposals = json.loads(proposals_path.read_text())
+    proposals = json.loads(proposals_path.read_text(encoding="utf-8"))
     pick = None
     if args.pick:
         pick = set(int(x.strip()) for x in args.pick.split(",") if x.strip())

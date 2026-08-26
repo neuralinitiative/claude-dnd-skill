@@ -157,7 +157,7 @@ def get_graph_context(campaign: str) -> str:
             "--hops", str(SCENE_HOPS),
             "--at-session", str(SCENE_AT_SESSION),
         ],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True, encoding="utf-8", text=True, timeout=30,
     )
     return result.stdout
 
@@ -193,7 +193,7 @@ def call_sonnet(prompt: str, system: str, timeout: int = 180) -> tuple:
             "--system-prompt", system,
             prompt,
         ],
-        capture_output=True, text=True, timeout=timeout,
+        capture_output=True, encoding="utf-8", text=True, timeout=timeout,
     )
     elapsed = time.time() - t0
     if result.returncode != 0:
@@ -246,13 +246,13 @@ def main():
     campaign = args.campaign or CAMP_DIR.name
 
     # Load campaign data
-    state = (CAMP_DIR / "state.md").read_text()
-    npcs = (CAMP_DIR / "npcs.md").read_text()
-    npcs_full = ((CAMP_DIR / "npcs-full.md").read_text()
+    state = (CAMP_DIR / "state.md").read_text(encoding="utf-8", errors="replace")
+    npcs = (CAMP_DIR / "npcs.md").read_text(encoding="utf-8", errors="replace")
+    npcs_full = ((CAMP_DIR / "npcs-full.md").read_text(encoding="utf-8", errors="replace")
                  if (CAMP_DIR / "npcs-full.md").exists() else "")
     npc_full = extract_target_npc(npcs_full) or "(target NPC entry not found in npcs-full.md)"
 
-    session_log = (CAMP_DIR / "session-log.md").read_text()
+    session_log = (CAMP_DIR / "session-log.md").read_text(encoding="utf-8", errors="replace")
     session_truncated = truncate_current_session(session_log)
 
     if args.sanitize:
