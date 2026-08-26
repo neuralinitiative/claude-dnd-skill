@@ -1,0 +1,75 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # README declares Python 3.10+, so the matrix pins the floor and a
+        # current release. Windows is here on purpose: every encoding bug this
+        # suite guards against only reproduces off a UTF-8 default.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test dependencies
+        # flask/flask-cors: several tests import dnd-display-app.py directly.
+        # pyyaml: graph_extract_deterministic.py sys.exit(2)s at import without
+        # it, which crashes pytest's collector with INTERNALERROR rather than a
+        # readable failure. It is NOT in display/requirements.txt.
+        # pygame and numpy are in display/requirements.txt but are runtime-only
+        # (dice server, TTS) and cost real build time, so they stay out.
+        run: python -m pip install --upgrade pip pytest flask flask-cors pyyaml
+      - name: pytest
+        run: python -m pytest tests/ -q
+
+  ascii-locale:
+    # The encoding bug class, measured behaviourally instead of by reading
+    # source. The suite's own fixtures are ASCII, but the SOURCE and data files
+    # are full of UTF-8, so a non-UTF-8 default codepage fails on import and on
+    # every bare read. This is the same failure a cp936 (Chinese) or cp1251
+    # (Russian) Windows console produces, in the strictest form available on a
+    # Linux runner.
+    name: non-UTF-8 locale (ubuntu / py3.13)
+    runs-on: ubuntu-latest
+    env:
+      LC_ALL: C
+      LANG: C
+      PYTHONUTF8: '0'
+      # PEP 538 coerces the C locale to C.UTF-8 on Linux, which would make this
+      # job pass without ever testing anything. Disabling it is what gives the
+      # job its teeth.
+      PYTHONCOERCECLOCALE: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest flask flask-cors pyyaml
+      - name: Assert the locale really is non-UTF-8
+        # Without this, a future runner that coerces the locale anyway would
+        # turn the job below into a green light that measures nothing.
+        run: |
+          python - <<'PY'
+          import locale, sys
+          enc = locale.getpreferredencoding(False)
+          print(f"preferred={enc}  stdout={sys.stdout.encoding}")
+          if "utf" in enc.lower():
+              sys.exit("locale was coerced to UTF-8 — this job would pass vacuously")
+          PY
+      - name: pytest under an ASCII locale
+        run: python -m pytest tests/ -q
