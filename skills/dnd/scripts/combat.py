@@ -21,12 +21,15 @@ Example:
                               {"name":"Goblin","dex_mod":1,"hp":7,"ac":15,"type":"npc"}]'
 """
 
-from __future__ import annotations
+from __future__ import annotations  # PEP 604 annotations on Python 3.9
+
 # Windows UTF-8 fix: GBK stdout crashes on unicode glyphs (► etc.) when piped.
 import sys
 if hasattr(sys.stdout, "reconfigure"):
     try: sys.stdout.reconfigure(encoding="utf-8")
-    except Exception: pass  # PEP 604 annotations on Python 3.9
+    # Swallowed on purpose: a stdout we cannot reconfigure is still a usable
+    # stdout, and refusing to start a combat over it would be the worse trade.
+    except Exception: pass
 
 import json
 import random
