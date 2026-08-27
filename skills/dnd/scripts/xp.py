@@ -217,13 +217,18 @@ def _write_char_xp(path: pathlib.Path, new_xp: int, current_level: int) -> bool:
     # Handles plain, level-up-pending, and pipe-delimited variants.
     def _repl(m: re.Match) -> str:
         return f"**{m.group(1)}:** {new_xp} / {next_lvl}" + suffix
-    updated = re.sub(
+    # subn, not sub: `updated == text` is also true when the field WAS found and
+    # the rendered value simply did not change, which is every award that leaves
+    # the total where it was. Warning on that told a player their XP had not been
+    # written when it had. The substitution COUNT is the only thing that answers
+    # "did the regex match", which is what the warning is actually about.
+    updated, hits = re.subn(
         r"\*\*(XP|经验|经验值):\*\*\s*(?:\d+)?\s*/\s*\d+[^\n|]*",
         _repl,
         text,
         count=1,
     )
-    if updated == text:
+    if hits == 0:
         # Fresh template sheets hold "**XP:** / 2700" (empty before the slash) — a
         # regex mismatch would silently skip writing; warn explicitly instead of
         # pretending the award succeeded.
