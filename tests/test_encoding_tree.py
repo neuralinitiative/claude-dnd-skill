@@ -65,7 +65,11 @@ def _read_write_calls_without_encoding(src: str) -> list[int]:
             t = tokens[j]
             if t.type == tokenize.NAME and t.string == "encoding":
                 nxt = tokens[j + 1] if j + 1 < len(tokens) else None
-                if nxt is not None and nxt.type == tokenize.OP and nxt.string == "=":
+                # depth == 1 is THIS call's argument list. Without that test a
+                # keyword belonging to a NESTED call satisfies the outer one, so
+                # `dst.write_text(src.read_text(encoding="utf-8"))` reads as
+                # covered while the write is still bare.
+                if nxt is not None and nxt.type == tokenize.OP and nxt.string == "=" and depth == 1:
                     has_encoding = True
             if t.type == tokenize.OP:
                 if t.string == "(":
@@ -140,3 +144,41 @@ class EncodingTreeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NestedCallSpans(unittest.TestCase):
+    """A keyword on an inner call must not cover an outer bare one.
+
+    `session_recap.py` writes `dst.write_text(src.read_text(encoding="utf-8"),
+    encoding="utf-8")` twice, so the shape is real and both halves genuinely
+    need their own keyword. Judging the span without a depth test made the
+    inner one count for the outer, which is the quiet way this scan would stop
+    seeing a whole class of site.
+    """
+
+    def test_inner_keyword_does_not_cover_an_outer_bare_call(self) -> None:
+        self.assertEqual(
+            _read_write_calls_without_encoding(
+                'dst.write_text(src.read_text(encoding="utf-8"))\n'
+            ),
+            [1],
+        )
+
+    def test_both_keywords_present_is_still_clean(self) -> None:
+        # The real session_recap.py shape. If the depth test cried wolf here it
+        # would be worse than the hole it closes.
+        self.assertEqual(
+            _read_write_calls_without_encoding(
+                'dst.write_text(src.read_text(encoding="utf-8"),\n'
+                '               encoding="utf-8")\n'
+            ),
+            [],
+        )
+
+    def test_a_keyword_on_the_closing_line_still_counts(self) -> None:
+        self.assertEqual(
+            _read_write_calls_without_encoding(
+                'p.write_text(\n    dedent("""x"""),\n    encoding="utf-8",\n)\n'
+            ),
+            [],
+        )
