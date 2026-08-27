@@ -12,6 +12,10 @@
 # instructed to write a canonical tail directly to disk so the next
 # /dnd load has working replay material.
 
+# The inline python below reads the tail file — force UTF-8 so a cp936/GBK
+# locale can't mis-decode it and falsely report the tail unparseable.
+export PYTHONUTF8=1
+
 set -u
 
 CAMP="${1:-}"
@@ -41,7 +45,7 @@ python3 - "$TAIL" <<'PY'
 import json, sys
 path = sys.argv[1]
 try:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 except Exception as e:
     print(f"verify_tail.sh: {path} — UNPARSEABLE: {e}")

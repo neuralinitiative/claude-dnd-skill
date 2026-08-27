@@ -31,7 +31,7 @@ class EntityRecognizerTests(unittest.TestCase):
                 | Aldric Brandt | The Council | alive |
                 | Mira | Thornblood | ally |
                 | Captain Voss | None | hostile |
-            """))
+            """), encoding="utf-8")
             ents = det.build_entity_set(campaign)
             self.assertIn("Aldric Brandt", ents)
             self.assertIn("Mira", ents)
@@ -50,7 +50,7 @@ class EntityRecognizerTests(unittest.TestCase):
 
                 ### Captain Voss
                 Hard-eyed. Distrusts strangers.
-            """))
+            """), encoding="utf-8")
             ents = det.build_entity_set(campaign)
             self.assertEqual({"Aldric Brandt", "Captain Voss"}, ents)
 
@@ -69,7 +69,7 @@ class EntityRecognizerTests(unittest.TestCase):
 
                 ### Greyholm Harbour
                 Deep-water port.
-            """))
+            """), encoding="utf-8")
             ents = det.build_entity_set(campaign)
             # We preserve the leading article — both forms count
             self.assertTrue("Iron Guild" in ents or "The Iron Guild" in ents,
@@ -255,14 +255,14 @@ class FutureTenseVerbTests(unittest.TestCase):
                 | Vedra | x |
                 | Aldric Brandt | y |
                 | Mira | z |
-            """))
+            """), encoding="utf-8")
             (campaign / "session-log.md").write_text(textwrap.dedent("""\
                 # Session Log
 
                 ## Session 1
 
                 Vedra plans to meet Aldric Brandt at dawn. Mira intends to confront Vedra. Vedra targets Mira.
-            """))
+            """), encoding="utf-8")
             proposals = det.extract_proposals(campaign)
             edges = {(p["from"], p["to"], p["type"]) for p in proposals}
             self.assertIn(("Vedra", "Aldric Brandt", "plans_to"), edges,
@@ -287,7 +287,7 @@ class ExtractEndToEndTests(unittest.TestCase):
             | Aldric Brandt | wood elf, retired |
             | Mira | thornblood ally |
             | Captain Voss | sea captain |
-        """))
+        """), encoding="utf-8")
 
         (campaign / "session-log.md").write_text(textwrap.dedent("""\
             # Session Log
@@ -299,7 +299,7 @@ class ExtractEndToEndTests(unittest.TestCase):
             ## Session 2
 
             Captain Voss killed Aldric in the alley behind the inn. Mira swore an oath to find him.
-        """))
+        """), encoding="utf-8")
         return campaign
 
     def test_extract_finds_known_relationships(self):
@@ -363,20 +363,20 @@ class ExtractEndToEndTests(unittest.TestCase):
     def test_empty_campaign_returns_empty_list(self):
         with tempfile.TemporaryDirectory() as td:
             campaign = pathlib.Path(td)
-            (campaign / "npcs.md").write_text("# NPCs\n\nNone yet.\n")
+            (campaign / "npcs.md").write_text("# NPCs\n\nNone yet.\n", encoding="utf-8")
             proposals = det.extract_proposals(campaign)
             self.assertEqual(proposals, [])
 
     def test_last_session_only_skips_archive(self):
         with tempfile.TemporaryDirectory() as td:
             campaign = pathlib.Path(td)
-            (campaign / "npcs.md").write_text("| Aldric | x |\n| Mira | y |\n")
+            (campaign / "npcs.md").write_text("| Aldric | x |\n| Mira | y |\n", encoding="utf-8")
             (campaign / "session-log-archive.md").write_text(
                 "## Session 1\nAldric met Mira at dawn.\n"
-            )
+            , encoding="utf-8")
             (campaign / "session-log.md").write_text(
                 "## Session 2\nAldric attacked Mira at dusk.\n"
-            )
+            , encoding="utf-8")
             proposals = det.extract_proposals(campaign, last_session_only=True)
             anchors = [p["source"]["anchor"] for p in proposals]
             self.assertTrue(any("attacked" in a for a in anchors),

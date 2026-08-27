@@ -1789,7 +1789,7 @@ def cmd_status(ruleset: str = DEFAULT_RULESET) -> None:
         print(f"Dataset not built for ruleset {ruleset}. "
               f"Run build_srd.py --ruleset {ruleset} to create it.")
         return
-    with open(out_file) as f:
+    with open(out_file, encoding="utf-8") as f:
         data = json.load(f)
     meta    = data.get("_meta", {})
     counts  = meta.get("record_counts", {})
@@ -1890,7 +1890,7 @@ def cmd_build(skip_fvtt: bool = False,
         **categories,
     }
 
-    with open(out_file, "w") as f:
+    with open(out_file, "w", encoding="utf-8") as f:
         json.dump(dataset, f, separators=(",", ":"))
 
     size_kb = os.path.getsize(out_file) // 1024

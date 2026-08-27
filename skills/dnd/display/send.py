@@ -63,12 +63,19 @@ import ssl
 import time
 import urllib.request
 
+# Windows CJK fix: Python decodes stdin via the system codepage (GBK), but
+# heredocs/pipes deliver UTF-8 bytes — force UTF-8 to keep Chinese narration intact.
+for _stream in (sys.stdin, sys.stdout):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 _DISPLAY_DIR = os.path.dirname(os.path.abspath(__file__))
 if _DISPLAY_DIR not in sys.path:
     sys.path.insert(0, _DISPLAY_DIR)
 from runtime_paths import rt          # writable runtime dir (update-safe)
 _SCHEME_FILE = os.path.join(_DISPLAY_DIR, ".scheme")   # launch marker → code dir
-_SCHEME = open(_SCHEME_FILE).read().strip() if os.path.exists(_SCHEME_FILE) else "http"
+_SCHEME = open(_SCHEME_FILE, encoding="utf-8").read().strip() if os.path.exists(_SCHEME_FILE) else "http"
 BASE_URL    = f"{_SCHEME}://localhost:5001"
 FLASK_URL   = f"{BASE_URL}/chunk"
 STATS_URL   = f"{BASE_URL}/stats"
@@ -95,7 +102,7 @@ else:
 
 def _read_token() -> str:
     try:
-        return open(TOKEN_FILE).read().strip()
+        return open(TOKEN_FILE, encoding="utf-8").read().strip()
     except FileNotFoundError:
         return ""
 
@@ -471,10 +478,9 @@ def main() -> None:
     #      body OPTIONAL. Read stdin when piped (heredoc/pipe), skip when an
     #      interactive TTY to avoid blocking on an unattended call.
     #
-    # Award flags (--inspiration-*/--xp-*/--milestone-*) used to force text=""
-    # which silently dropped any heredoc body bundled with them. Reading piped
-    # stdin under the same isatty() gate as stat flags lets bundled narration
-    # flow through to the text-send block below.
+    # Award flags (--inspiration-*/--xp-*/--milestone-*) fall into category 2:
+    # reading piped stdin under the isatty() gate lets bundled narration flow
+    # through to the text-send block while bare award calls don't block.
     # ── Dice request (DM → phones) — broadcast + optional blocking wait ──────
     if args.dice_request:
         # Comma-split character list so the DM can address multiple players at once,

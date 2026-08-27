@@ -34,7 +34,7 @@ def _repo_root() -> pathlib.Path:
     try:
         r = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, encoding="utf-8", text=True, check=True,
         )
         return pathlib.Path(r.stdout.strip())
     except Exception:
@@ -54,15 +54,15 @@ def _sub_once(text: str, pattern: str, repl: str, *, where: str, count_expected:
 
 
 def _read(p: pathlib.Path) -> str:
-    return p.read_text()
+    return p.read_text(encoding="utf-8")
 
 
 def bump_version_file(root, old, new, dry):
     p = root / "VERSION"
-    if p.read_text().strip() != old:
-        raise BumpError(f"VERSION holds {p.read_text().strip()!r}, expected {old!r}")
+    if p.read_text(encoding="utf-8").strip() != old:
+        raise BumpError(f"VERSION holds {p.read_text(encoding='utf-8').strip()!r}, expected {old!r}")
     if not dry:
-        p.write_text(new + "\n")
+        p.write_text(new + "\n", encoding="utf-8")
     return "VERSION"
 
 
@@ -71,7 +71,7 @@ def bump_plugin_json(root, old, new, dry):
     out = _sub_once(_read(p), rf'("version":\s*)"{re.escape(old)}"', rf'\g<1>"{new}"',
                     where="plugin.json")
     if not dry:
-        p.write_text(out)
+        p.write_text(out, encoding="utf-8")
     return ".claude-plugin/plugin.json"
 
 
@@ -82,7 +82,7 @@ def bump_marketplace_json(root, old, new, dry):
     out = _sub_once(_read(p), rf'("version":\s*)"{re.escape(old)}"', rf'\g<1>"{new}"',
                     where="marketplace.json (plugin entry)")
     if not dry:
-        p.write_text(out)
+        p.write_text(out, encoding="utf-8")
     return ".claude-plugin/marketplace.json"
 
 
@@ -95,7 +95,7 @@ def bump_skill_description(root, old, new, dry):
     if n != 1:
         raise BumpError(f"SKILL.md: expected 1 'vX.Y[.Z] ·' prefix, found {n}")
     if not dry:
-        p.write_text(out)
+        p.write_text(out, encoding="utf-8")
     return f"skills/dnd/SKILL.md (picker prefix → v{new})"
 
 
@@ -112,7 +112,7 @@ def bump_changelog(root, old, new, date, title, dry):
     out = text[:m.start()] + replacement + text[m.end():]
     note = "" if body.strip() else "  ⚠ [Unreleased] was empty — add notes!"
     if not dry:
-        p.write_text(out)
+        p.write_text(out, encoding="utf-8")
     return f"CHANGELOG.md (promoted [Unreleased] → [{new}]){note}"
 
 
@@ -135,7 +135,7 @@ def main() -> int:
     date = args.date or datetime.date.today().isoformat()
 
     root = _repo_root()
-    old = (root / "VERSION").read_text().strip()
+    old = (root / "VERSION").read_text(encoding="utf-8").strip()
     if new == old:
         print(f"error: VERSION is already {old}", file=sys.stderr)
         return 2

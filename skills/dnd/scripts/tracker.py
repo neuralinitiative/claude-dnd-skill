@@ -78,15 +78,15 @@ def _state_path(campaign: str) -> str:
 def _load(campaign: str) -> dict:
     path = _state_path(campaign)
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
 def _save(campaign: str, state: dict) -> None:
-    with open(_state_path(campaign), "w") as f:
-        json.dump(state, f, indent=2)
+    with open(_state_path(campaign), "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
 
 
 def _entity(state: dict, name: str) -> dict:

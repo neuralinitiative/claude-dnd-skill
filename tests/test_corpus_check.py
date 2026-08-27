@@ -33,12 +33,18 @@ class CorpusCheckTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        # Preserve the outer value; tearDown restores rather than pops (pop
+        # would break pytest's outer isolation).
+        self._saved_campaign_root = os.environ.get("DND_CAMPAIGN_ROOT")
         os.environ["DND_CAMPAIGN_ROOT"] = self.tmp
         self.camp = pathlib.Path(self.tmp) / "campaigns" / "c"
         self.camp.mkdir(parents=True)
 
     def tearDown(self):
-        os.environ.pop("DND_CAMPAIGN_ROOT", None)
+        if self._saved_campaign_root is None:
+            os.environ.pop("DND_CAMPAIGN_ROOT", None)
+        else:
+            os.environ["DND_CAMPAIGN_ROOT"] = self._saved_campaign_root
 
     def _corpus(self, ids, indexed=None, with_arc=True):
         indexed = ids if indexed is None else indexed

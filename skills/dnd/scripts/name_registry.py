@@ -44,6 +44,14 @@ import re
 import sys
 
 from paths import campaigns_dir, characters_dir, _root
+from utf8io import read_text, TextDecodeError
+
+# Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 def _registry_path() -> pathlib.Path:
@@ -72,8 +80,11 @@ def _load() -> dict:
     if not p.exists():
         return {"version": 1, "updated": _today(), "entries": {}}
     try:
-        return json.loads(p.read_text())
-    except json.JSONDecodeError:
+        # Lossless read: a GBK registry from the pre-sweep plugin decodes
+        # cleanly and migrates on the next save; anything undecodable falls
+        # back to the loud "starting fresh" path below.
+        return json.loads(read_text(p))
+    except (TextDecodeError, json.JSONDecodeError):
         sys.stderr.write(f"name_registry: {p} is corrupt; starting fresh\n")
         return {"version": 1, "updated": _today(), "entries": {}}
 
@@ -82,7 +93,8 @@ def _save(data: dict) -> None:
     data["updated"] = _today()
     p = _registry_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                 encoding="utf-8")
 
 
 # ── Scanners ──────────────────────────────────────────────────────────────
@@ -100,7 +112,7 @@ def _campaign_session_count(camp_dir: pathlib.Path) -> int:
     state = camp_dir / "state.md"
     if not state.exists():
         return 0
-    m = _SESSION_COUNT.search(state.read_text(errors="replace"))
+    m = _SESSION_COUNT.search(state.read_text(encoding="utf-8", errors="replace"))
     return int(m.group(1)) if m else 0
 
 
@@ -109,17 +121,17 @@ def _scan_campaign_npcs(camp_dir: pathlib.Path) -> list[str]:
     names: list[str] = []
     npcs = camp_dir / "npcs.md"
     if npcs.exists():
-        for row in _NPCS_TABLE_ROW.finditer(npcs.read_text(errors="replace")):
+        for row in _NPCS_TABLE_ROW.finditer(npcs.read_text(encoding="utf-8", errors="replace")):
             cell = row.group(1).strip()
-            # Skip header rows ("Name") and divider rows ("---")
-            if not cell or cell.lower() in {"name"} or set(cell) <= {"-", " ", ":"}:
+            # Skip header rows ("Name" / "名字") and divider rows ("---")
+            if not cell or cell.lower() in {"name", "名字", "姓名"} or set(cell) <= {"-", " ", ":"}:
                 continue
             names.append(cell)
     full = camp_dir / "npcs-full.md"
     if full.exists():
-        for h in _NPCS_FULL_HEADER.finditer(full.read_text(errors="replace")):
+        for h in _NPCS_FULL_HEADER.finditer(full.read_text(encoding="utf-8", errors="replace")):
             names.append(h.group(1).strip())
-        for h in _NPC_HEADER.finditer(full.read_text(errors="replace")):
+        for h in _NPC_HEADER.finditer(full.read_text(encoding="utf-8", errors="replace")):
             names.append(h.group(1).strip())
     return names
 
@@ -131,7 +143,7 @@ def _scan_campaign_pcs(camp_dir: pathlib.Path) -> list[str]:
     if not char_dir.exists():
         return pcs
     for f in sorted(char_dir.glob("*.md")):
-        text = f.read_text(errors="replace")
+        text = f.read_text(encoding="utf-8", errors="replace")
         m = _CHARACTER_H1.search(text)
         if m:
             pcs.append(m.group(1).strip())
@@ -144,8 +156,8 @@ def _scan_campaign_graph(camp_dir: pathlib.Path) -> list[tuple[str, str]]:
     if not g.exists():
         return []
     try:
-        data = json.loads(g.read_text())
-    except json.JSONDecodeError:
+        data = json.loads(g.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return []
     out = []
     for node in data.get("nodes", []):
@@ -293,7 +305,7 @@ def check(name: str) -> dict:
     severity = "warn"
     if cfg_path.exists():
         try:
-            cfg = json.loads(cfg_path.read_text())
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
             severity = cfg.get("severity", "warn")
         except (json.JSONDecodeError, OSError):
             pass
@@ -372,7 +384,7 @@ def _scan_prose(camp_dir: pathlib.Path,
         f = camp_dir / fname
         if not f.exists():
             continue
-        text = f.read_text(errors="replace")
+        text = f.read_text(encoding="utf-8", errors="replace")
         for m in _PROSE_NAME_PAT.finditer(text):
             cand = m.group(1).strip()
             if cand in _PROSE_STOP_PHRASES:

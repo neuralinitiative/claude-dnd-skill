@@ -44,7 +44,7 @@ def _stored_meta() -> dict:
     if not os.path.exists(OUT_FILE):
         return {}
     try:
-        with open(OUT_FILE) as f:
+        with open(OUT_FILE, encoding="utf-8") as f:
             return json.load(f).get("_meta", {})
     except Exception:
         return {}

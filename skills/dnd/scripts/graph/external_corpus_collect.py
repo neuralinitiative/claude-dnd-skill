@@ -207,7 +207,7 @@ def save_post(post: dict, out_dir: pathlib.Path) -> Optional[pathlib.Path]:
               f"**Score:** {score}  **Created (utc):** {int(created)}\n"
               f"**Post ID:** {post_id}\n\n"
               f"---\n\n")
-    out_path.write_text(header + body)
+    out_path.write_text(header + body, encoding="utf-8")
     return out_path
 
 
@@ -268,7 +268,8 @@ def main():
         "rejected": rejected,
         "out_dir": str(out_dir),
     }
-    (out_dir / "_summary.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / "_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False),
+                                           encoding="utf-8")
 
 
 if __name__ == "__main__":

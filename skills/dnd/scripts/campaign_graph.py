@@ -49,12 +49,15 @@ Subcommands:
   subgraph       --seed ID [--seed ID ...] [--hops H] [--at-session N]
 """
 import argparse
+import datetime
 import json
 import pathlib
+import shutil
 import sys
 from typing import Optional
 
 from paths import find_campaign
+from utf8io import read_text, TextDecodeError
 
 
 # -------- IO --------
@@ -63,12 +66,32 @@ def _graph_path(campaign: str):
     return find_campaign(campaign) / "graph.json"
 
 
+def _backup_corrupt(p: pathlib.Path) -> pathlib.Path:
+    """Copy an unreadable graph aside before any write-back can flatten it."""
+    ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = p.with_name(f"graph.json.corrupt-{ts}")
+    shutil.copy2(p, target)
+    return target
+
+
 def _load(campaign: str) -> dict:
     p = _graph_path(campaign)
     if not p.exists():
         return {"version": 1, "nodes": [], "edges": []}
-    with open(p) as f:
-        data = json.load(f)
+    try:
+        # Lossless read: a legacy-GBK graph.json (Chinese node names written
+        # by the pre-sweep plugin) decodes cleanly and migrates on next save.
+        data = json.loads(read_text(p))
+    except (TextDecodeError, json.JSONDecodeError):
+        # Corrupt or undecodable: back it up FIRST, then continue with an
+        # empty graph — otherwise the next _save silently flattens the file.
+        backup = _backup_corrupt(p)
+        print(
+            f"[campaign_graph] {p}: unreadable (corrupt JSON or unknown encoding) — "
+            f"backed up to {backup}; continuing with an empty graph",
+            file=sys.stderr,
+        )
+        return {"version": 1, "nodes": [], "edges": []}
     data.setdefault("version", 1)
     data.setdefault("nodes", [])
     data.setdefault("edges", [])
@@ -78,7 +101,7 @@ def _load(campaign: str) -> dict:
 def _save(campaign: str, data: dict) -> None:
     p = _graph_path(campaign)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as f:
+    with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -693,7 +716,7 @@ def cmd_extract(args) -> int:
         print(f"# Deterministic extraction — {len(proposals)} proposals from "
               f"{campaign_dir.name}", file=sys.stderr)
         if getattr(args, "write", None):
-            pathlib.Path(args.write).write_text(out_json)
+            pathlib.Path(args.write).write_text(out_json, encoding="utf-8")
             print(f"# wrote proposals to {args.write}", file=sys.stderr)
         else:
             print(out_json)
@@ -704,9 +727,9 @@ def cmd_extract(args) -> int:
 
     sources = []
     if archive.exists():
-        sources.append((archive.name, archive.read_text()))
+        sources.append((archive.name, archive.read_text(encoding="utf-8", errors="replace")))
     if log.exists():
-        sources.append((log.name, log.read_text()))
+        sources.append((log.name, log.read_text(encoding="utf-8", errors="replace")))
     if not sources:
         print(f"no session-log files in {campaign_dir}", file=sys.stderr)
         return 1
@@ -721,7 +744,7 @@ def cmd_extract(args) -> int:
             "--system-prompt", _EXTRACTION_SYSTEM,
             prompt,
         ],
-        capture_output=True, text=True, timeout=420,
+        capture_output=True, encoding="utf-8", text=True, timeout=420,
     )
     if result.returncode != 0:
         print(f"claude returned {result.returncode}: {result.stderr}", file=sys.stderr)
@@ -764,7 +787,8 @@ def cmd_extract(args) -> int:
 
     if args.write:
         out = pathlib.Path(args.write).expanduser()
-        out.write_text(json.dumps(deduped, indent=2))
+        out.write_text(json.dumps(deduped, indent=2, ensure_ascii=False),
+                       encoding="utf-8")
         print(f"# wrote {len(deduped)} proposals to {out}", file=sys.stderr)
 
     return 0
@@ -776,7 +800,7 @@ def cmd_extract_apply(args) -> int:
     if not proposals_path.exists():
         print(f"proposals file not found: {proposals_path}", file=sys.stderr)
         return 1
-    proposals = json.loads(proposals_path.read_text())
+    proposals = json.loads(proposals_path.read_text(encoding="utf-8"))
     pick = None
     if args.pick:
         pick = set(int(x.strip()) for x in args.pick.split(",") if x.strip())

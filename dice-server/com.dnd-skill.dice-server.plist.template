@@ -20,6 +20,8 @@
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:{{HOME}}/.local/bin</string>
+        <key>PYTHONUTF8</key>
+        <string>1</string>
     </dict>
 
     <key>WorkingDirectory</key>

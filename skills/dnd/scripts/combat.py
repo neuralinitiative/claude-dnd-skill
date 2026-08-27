@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 combat.py — D&D 5e combat tracker
 
@@ -20,7 +21,12 @@ Example:
                               {"name":"Goblin","dex_mod":1,"hp":7,"ac":15,"type":"npc"}]'
 """
 
-from __future__ import annotations  # PEP 604 annotations on Python 3.9
+from __future__ import annotations
+# Windows UTF-8 fix: GBK stdout crashes on unicode glyphs (► etc.) when piped.
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try: sys.stdout.reconfigure(encoding="utf-8")
+    except Exception: pass  # PEP 604 annotations on Python 3.9
 
 import json
 import random

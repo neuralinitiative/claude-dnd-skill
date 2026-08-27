@@ -31,7 +31,7 @@ def _run(args, env_overrides=None, stdin_text=""):
         env.update(env_overrides)
     r = subprocess.run(
         [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, env=env, input=stdin_text,
+        capture_output=True, encoding="utf-8", text=True, env=env, input=stdin_text,
     )
     return r.returncode, r.stdout, r.stderr
 
@@ -48,7 +48,7 @@ class GraphSubcommandTests(unittest.TestCase):
         self.campaign = f"unittest-graph-{os.getpid()}"
         self.camp_dir = self.root / "campaigns" / self.campaign
         self.camp_dir.mkdir(parents=True)
-        (self.camp_dir / "npcs.md").write_text("| Aldric | x |\n| Mira | y |\n")
+        (self.camp_dir / "npcs.md").write_text("| Aldric | x |\n| Mira | y |\n", encoding="utf-8")
 
     def tearDown(self):
         self.td.cleanup()
@@ -57,7 +57,48 @@ class GraphSubcommandTests(unittest.TestCase):
         gp = self.camp_dir / "graph.json"
         if not gp.exists():
             return {"nodes": [], "edges": []}
-        return json.loads(gp.read_text())
+        return json.loads(gp.read_text(encoding="utf-8"))
+
+    # ── legacy-GBK / corrupt graph.json handling ────────────────────────────
+
+    def test_legacy_gbk_graph_migrates(self):
+        """A graph.json written in GBK by the pre-sweep plugin (Chinese node
+        names) decodes losslessly and is re-saved as UTF-8 on the next write —
+        a one-time migration, not a flatten."""
+        gp = self.camp_dir / "graph.json"
+        gp.write_bytes(
+            json.dumps({"version": 1, "nodes": [
+                {"id": "npc_aldric", "type": "npc", "name": "阿尔德里克"}
+            ], "edges": []}, ensure_ascii=False).encode("gbk")
+        )
+        rc, out, err = _run(
+            ["add-node", "--campaign", self.campaign,
+             "--type", "npc", "--name", "Mira"], env_overrides=self.env
+        )
+        self.assertEqual(rc, 0, msg=err)
+        data = self._graph_json()  # parses as UTF-8, so the file migrated
+        names = {n["name"] for n in data["nodes"]}
+        self.assertIn("阿尔德里克", names)
+        self.assertIn("Mira", names)
+
+    def test_corrupt_graph_backed_up_before_continue(self):
+        """An undecodable graph.json is copied aside BEFORE the flow continues,
+        so the next save can't silently flatten the original bytes."""
+        gp = self.camp_dir / "graph.json"
+        raw = b"\xff\xfe\x00 not json at all \x80\x81"
+        gp.write_bytes(raw)
+        rc, out, err = _run(
+            ["add-node", "--campaign", self.campaign,
+             "--type", "npc", "--name", "Mira"], env_overrides=self.env
+        )
+        self.assertEqual(rc, 0, msg=err)
+        self.assertIn("backed up", err)
+        backups = sorted(self.camp_dir.glob("graph.json.corrupt-*"))
+        self.assertEqual(len(backups), 1,
+                         msg="corrupt graph should be backed up before continuing")
+        self.assertEqual(backups[0].read_bytes(), raw)
+        data = self._graph_json()
+        self.assertEqual(len(data["nodes"]), 1)
 
     # ── add-node + add-edge + list ─────────────────────────────────────────
 
@@ -188,7 +229,7 @@ class GraphSubcommandTests(unittest.TestCase):
             ## Session 1
 
             Aldric met Mira at the docks. Mira swore an oath to Aldric.
-        """))
+        """), encoding="utf-8")
         out_path = self.camp_dir / "proposals.json"
         rc, out, err = _run(
             ["extract", "--campaign", self.campaign,
@@ -197,7 +238,7 @@ class GraphSubcommandTests(unittest.TestCase):
         )
         self.assertEqual(rc, 0, msg=err)
         self.assertTrue(out_path.exists())
-        proposals = json.loads(out_path.read_text())
+        proposals = json.loads(out_path.read_text(encoding="utf-8"))
         self.assertGreater(len(proposals), 0,
                            f"deterministic extract produced no proposals; stderr: {err}")
         # Every proposal has the required shape
@@ -223,7 +264,7 @@ class GraphSubcommandTests(unittest.TestCase):
              "confidence": "high"},
         ]
         prop_path = self.camp_dir / "props.json"
-        prop_path.write_text(json.dumps(proposals))
+        prop_path.write_text(json.dumps(proposals), encoding="utf-8")
 
         rc, out, err = _run(
             ["extract-apply", "--campaign", self.campaign,
@@ -242,7 +283,7 @@ class GraphSubcommandTests(unittest.TestCase):
         # A session log with a clean SVO sentence the verb table should catch.
         (self.camp_dir / "session-log.md").write_text(
             "## Session 1\n\nAldric betrayed Mira at the gate.\n"
-        )
+        , encoding="utf-8")
         rc, out, err = _run(
             ["extract", "--campaign", self.campaign,
              "--deterministic", "--apply", "--min-confidence", "low"],
@@ -342,7 +383,7 @@ class GraphSubcommandTests(unittest.TestCase):
             ## Session 1
 
             Aldric is possessed by a ghost. Mira fears the dark gods.
-        """))
+        """), encoding="utf-8")
         # Run extract --deterministic
         out_path = self.camp_dir / "props.json"
         rc, out, err = _run(
@@ -351,7 +392,7 @@ class GraphSubcommandTests(unittest.TestCase):
             env_overrides=self.env
         )
         self.assertEqual(rc, 0, msg=err)
-        proposals = json.loads(out_path.read_text())
+        proposals = json.loads(out_path.read_text(encoding="utf-8"))
         # We expect at least one categorical proposal
         cat_proposals = [p for p in proposals if p.get("category_to") or p.get("category_from")]
         self.assertGreater(len(cat_proposals), 0,
