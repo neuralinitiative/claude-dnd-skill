@@ -20,8 +20,26 @@ You retain copyright on your own contributions. AGPL-3.0-or-later applies forwar
 1. For substantive changes, open an issue first — gives a chance to align on scope before code is written
 2. Small bug fixes or doc improvements can go straight to a PR
 3. Write a clear PR description that explains the *why*, not just the *what*
-4. There's no CI; the maintainer reviews PRs manually
+4. CI runs the test suite on Linux, macOS and Windows across Python 3.10 and 3.13, plus a non-UTF-8 locale job; the maintainer also reviews every PR by hand
 5. The maintainer may apply minor hardening on top of merged PRs (e.g. tightening defaults, adding SRI on CDN-loaded assets) — these are documented as separate follow-up commits in the same release, never as edits to your work
+
+## Security scan
+
+The plugin is listed in the HOL awesome-ai-plugins catalog, which scans it.
+Their scanner is a normal PyPI package, so we run it on demand rather than
+adding their GitHub Action to CI — a composite action runs with full access to
+the runner on every push, and that is a long-lived bet on who owns that
+repository later. We take the small trust-score reduction instead.
+
+```
+python3 scripts/scan_plugin.py              # same gate the catalog applies
+python3 scripts/scan_plugin.py --keep-venv  # reuse the env, ~0.5s instead of ~13s
+```
+
+Worth running before a release, or after touching workflows, scripts, or
+anything that looks like a credential. The scanner wheel is pinned by version
+and SHA256; a mismatch aborts instead of installing. Nothing runs this
+automatically.
 
 ## Questions
 
