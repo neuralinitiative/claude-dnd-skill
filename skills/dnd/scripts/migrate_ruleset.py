@@ -54,7 +54,11 @@ except Exception:
 
 
 HEADER_LINE_PREFIX = "**Created:**"
-RULESET_TOKEN = "**Ruleset:**"
+# Named LABEL, not TOKEN: these are Markdown field labels written into the
+# state.md header, not credentials. The previous name tripped secret
+# scanners on the variable name alone (a *_TOKEN assigned a string
+# literal), which failed the HOL plugin scan with a false positive.
+RULESET_LABEL = "**Ruleset:**"
 
 
 def _state_path(campaign: str) -> Path:
@@ -65,7 +69,7 @@ def _has_ruleset_field(text: str) -> bool:
     # Search only the header (first non-empty line that contains **Created:**)
     for line in text.splitlines():
         if HEADER_LINE_PREFIX in line:
-            return RULESET_TOKEN in line
+            return RULESET_LABEL in line
     return False
 
 
@@ -73,10 +77,10 @@ def _inject_ruleset(text: str, ruleset: str) -> str:
     out = []
     injected = False
     for line in text.splitlines():
-        if not injected and HEADER_LINE_PREFIX in line and RULESET_TOKEN not in line:
+        if not injected and HEADER_LINE_PREFIX in line and RULESET_LABEL not in line:
             # Append two-space-separated field at end of header line.
             stripped = line.rstrip()
-            line = f"{stripped}  {RULESET_TOKEN} {ruleset}"
+            line = f"{stripped}  {RULESET_LABEL} {ruleset}"
             injected = True
         out.append(line)
     if not injected:

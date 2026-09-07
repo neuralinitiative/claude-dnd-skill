@@ -1,0 +1,26 @@
+# Keeps the automation and dependency surfaces current.
+#
+# Two surfaces exist: the GitHub Actions CI uses, and the display companion's
+# requirements.txt (flask, flask-cors, pygame, numpy). The optional dice server
+# imports flask but ships no manifest of its own, so it is covered in practice
+# by the display pins rather than by a second entry — a directory without a
+# manifest would only make Dependabot error.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(ci)
+    labels:
+      - dependencies
+
+  - package-ecosystem: pip
+    directory: /skills/dnd/display
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    labels:
+      - dependencies
