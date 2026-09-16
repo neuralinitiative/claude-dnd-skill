@@ -253,6 +253,30 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  /* Block badge — a small, dim mark in the block's top corner. It had no rule
+     at all while the code that creates it was never called; both halves are
+     needed for the feature to exist. */
+  .block-badge {
+    position: absolute;
+    top: 0.2em;
+    right: 0;
+    width: 22px;
+    height: 22px;
+    opacity: 0.30;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .dm-block:hover .block-badge,
+  .npc-block:hover .block-badge,
+  .dice-block:hover .block-badge,
+  .tutor-block:hover .block-badge { opacity: 0.55; }
+
+  .dm-block, .npc-block, .dice-block, .tutor-block { position: relative; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .block-badge { transition: none; }
+  }
+
   .dm-block p {
     color: #d4c4a0;
     text-shadow: 0 1px 6px rgba(0,0,0,0.8);
@@ -4661,18 +4685,58 @@ const _BLOCK_BADGES = [
   { icon: 'faction',      words: ['faction','guild','order','council','alliance','sworn','allegiance','representative','envoy'] },
 ];
 
+// Block KIND is language-agnostic — the display already knows an NPC block is
+// an NPC block regardless of what language it is written in. Deriving what can
+// be derived means these badges work in every locale, and only the semantic
+// ones have to fall back to reading words.
+const _KIND_BADGES = {
+  'npc-block':    'chat',
+  'dice-block':   'attack',
+  'tutor-block':  'scroll',
+  'player-block': null,          // the player's own line needs no badge
+};
+
+// Semantic badges still need to read the prose, and _BLOCK_BADGES above is
+// English. A campaign played in another language can replace the table without
+// editing this file by setting window.DND_BLOCK_BADGES to the same shape
+// ([{icon, words}]). The English list is the FALLBACK, not the definition.
+function _badgeTable() {
+  const override = window.DND_BLOCK_BADGES;
+  return Array.isArray(override) && override.length ? override : _BLOCK_BADGES;
+}
+
 function _addBlockBadge(el) {
-  const text = (el.textContent || '').toLowerCase();
-  for (const { icon, words } of _BLOCK_BADGES) {
-    if (words.some(w => text.includes(w))) {
-      const img = document.createElement('img');
-      img.src = '/icons/' + icon + '.png';
-      img.className = 'block-badge';
-      img.alt = icon;
-      el.appendChild(img);
-      return;
+  if (el.querySelector('.block-badge')) return;      // idempotent
+
+  // 1. Kind first. Works in every language, no word list involved.
+  let icon = null;
+  for (const cls of Object.keys(_KIND_BADGES)) {
+    if (el.classList.contains(cls)) {
+      icon = _KIND_BADGES[cls];
+      if (icon === null) return;                     // deliberately no badge
+      break;
     }
   }
+
+  // 2. Only DM narration reaches the word table, and only there does the
+  //    language of that table matter.
+  if (!icon) {
+    const text = (el.textContent || '').toLowerCase();
+    for (const entry of _badgeTable()) {
+      const words = entry && entry.words;
+      if (Array.isArray(words) && words.some(w => w && text.includes(String(w).toLowerCase()))) {
+        icon = entry.icon;
+        break;
+      }
+    }
+  }
+  if (!icon) return;                                 // no guess beats a wrong one
+
+  const img = document.createElement('img');
+  img.src = '/icons/' + icon + '.png';
+  img.className = 'block-badge';
+  img.alt = '';                                      // decorative; the prose says it
+  el.appendChild(img);
 }
 
 function flushNewBlock() {
@@ -4683,6 +4747,7 @@ function flushNewBlock() {
   }
   // Add a soft divider if there was content
   if (currentEl) {
+    _addBlockBadge(currentEl);
     _addTtsBar(currentEl);
     const div = document.createElement('div');
     div.className = 'divider';
