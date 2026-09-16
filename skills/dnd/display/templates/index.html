@@ -5930,8 +5930,13 @@ function openSrdModal(name, category, level) {
     .then(r => r.json())
     .then(data => {
       if (!data.found) {
-        const linkHtml = data.wikidot_url
-          ? `<br><a href="${data.wikidot_url}" target="_blank" rel="noopener" style="color:#c9a84c;font-size:11px;opacity:0.85;text-decoration:none;">View on D&D 5e Wiki ↗</a>`
+        // The label travels with the URL, because the destination is not always
+        // the same reference and a link should say where it goes before it is
+        // clicked. No verified destination for this category means no link.
+        const refUrl   = data.reference_url || data.wikidot_url || '';
+        const refLabel = data.reference_label || 'View on D&D 5e Wiki';
+        const linkHtml = refUrl
+          ? `<br><a href="${_esc(refUrl)}" target="_blank" rel="noopener" style="color:#c9a84c;font-size:11px;opacity:0.85;text-decoration:none;">${_esc(refLabel)} ↗</a>`
           : `<br><span style="font-size:10px;opacity:0.6">May be from a supplement (Xanathar's, Tasha's, etc.)</span>`;
         // Near-miss "did you mean?" chips — tap one to re-run the lookup on the
         // closest matching name. Recovers a mistyped spell/condition/monster

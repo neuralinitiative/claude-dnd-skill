@@ -330,35 +330,72 @@ FORMATTERS = {
 }
 
 
-# ─── Wikidot fallback URL ─────────────────────────────────────────────────────
+# ─── Reference link for a name we do not hold ────────────────────────────────
+#
+# Two different situations, and only one of them is a guess:
+#
+#   1. A SUPPLEMENTAL record carries the URL it was actually fetched from. That
+#      page exists, because we read it. Non-SRD content — Xanathar's, Tasha's,
+#      subclass features — lives there and nowhere else, so this branch must
+#      keep pointing where it points.
+#
+#   2. Everything else was a constructed URL: slugify the name, prefix it by
+#      category, hope. Nothing checked the page existed, and when a name did
+#      not slugify to that site's convention the reader got a dead page with no
+#      warning before the click. An unknown category degraded to a bare slug at
+#      the site root, which is the least likely form to resolve at all.
+#
+# Branch 2 now points at an SRD reference whose coverage was checked against
+# every category below, with a control: a deliberately fake slug returns 404,
+# so a 200 means the page is really there rather than a catch-all route
+# swallowing everything. It is the same SRD content, without the ads.
 
-def wikidot_url(name: str, category: str = None, record: dict = None) -> str:
-    """Return a wikidot.com URL for a name that wasn't found in the dataset.
+#: Category → path on the reference wiki. Every one of these was verified to
+#: resolve; a category missing from here has no verified mapping and gets no
+#: constructed link rather than a guessed one.
+_WIKI_SECTIONS = {
+    "spells":      "spells",
+    "spell":       "spells",
+    "conditions":  "conditions",
+    "condition":   "conditions",
+    "monsters":    "monsters",
+    "monster":     "monsters",
+    "equipment":   "gear",
+    "magic_items": "magic-items",
+    "features":    "features",
+    "feature":     "features",
+}
 
-    Uses the record's own wikidot_url field if present (supplemental entries),
-    otherwise constructs a URL from the category and name slug.
-    Falls back to a site search for unknown categories.
+_WIKI_BASE = "https://neuralinitiative.ai/wiki"
+
+
+def reference_url(name: str, category: str = None, record: dict = None) -> dict:
+    """Return {url, label} for a name, or {} when there is nothing to link.
+
+    A supplemental record's own stored URL always wins — that page was fetched,
+    so it resolves, and it holds content the SRD reference does not have.
     """
     if record and record.get("wikidot_url"):
-        return record["wikidot_url"]
+        return {"url": record["wikidot_url"], "label": "View on D&D 5e Wiki"}
 
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    # Map internal category keys back to wikidot path prefixes
-    _PREFIXES = {
-        "spells":     "spell",
-        "spell":      "spell",
-        "conditions": "condition",
-        "condition":  "condition",
-        "monsters":   "monster",
-        "monster":    "monster",
-        "equipment":  "equipment",
-        "magic_items": "magic-items",
+    section = _WIKI_SECTIONS.get((category or "").lower())
+    if not section:
+        # No verified mapping. A guessed link is worse than none: it reads as
+        # an answer and dead-ends.
+        return {}
+
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    if not slug:
+        return {}
+    return {
+        "url": f"{_WIKI_BASE}/{section}/{slug}",
+        "label": "View the full description on the Neural Initiative Wiki",
     }
-    prefix = _PREFIXES.get(category or "")
-    if prefix:
-        return f"https://dnd5e.wikidot.com/{prefix}:{slug}"
-    # For features and unknowns: direct slug URL (wikidot search is unavailable)
-    return f"https://dnd5e.wikidot.com/{slug}"
+
+
+def wikidot_url(name: str, category: str = None, record: dict = None) -> str:
+    """Back-compat shim: the URL only, or "" when there is nothing to link."""
+    return reference_url(name, category=category, record=record).get("url", "")
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────

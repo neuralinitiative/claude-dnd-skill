@@ -1177,7 +1177,10 @@ def srd_lookup():
         return jsonify({"found": True, "name": name, "category": resolved_cat, "text": text})
     # Not found — offer near-miss "did you mean?" suggestions (typo recovery)
     # plus the wikidot fallback URL so the frontend can still link out.
-    wurl = _lookup.wikidot_url(name, category=category)
+    # `ref` is {} when there is no VERIFIED destination for this category, and
+    # the frontend renders no link at all in that case: a guessed URL reads as
+    # an answer and dead-ends, which is worse than saying nothing.
+    ref = _lookup.reference_url(name, category=category)
     suggestions = []
     try:
         for sg_name, sg_cat in _lookup.suggest(name, category=category, n=3):
@@ -1185,7 +1188,11 @@ def srd_lookup():
     except Exception:
         pass  # suggestion is best-effort; never fail the lookup over it
     return jsonify({"found": False, "name": name,
-                    "wikidot_url": wurl, "suggestions": suggestions})
+                    "reference_url": ref.get("url", ""),
+                    "reference_label": ref.get("label", ""),
+                    # kept so an older cached frontend still gets a link
+                    "wikidot_url": ref.get("url", ""),
+                    "suggestions": suggestions})
 
 
 @app.route("/ping")
