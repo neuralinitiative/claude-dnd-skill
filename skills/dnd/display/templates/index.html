@@ -4718,10 +4718,19 @@ function _addBlockBadge(el) {
     }
   }
 
-  // 2. Only DM narration reaches the word table, and only there does the
-  //    language of that table matter.
+  // 2. Only DM narration falls through to reading words, and only then does
+  //    the language of the table matter.
+  //
+  //    Read the PROSE, not el.textContent. A finalised block also contains the
+  //    TTS bar, whose own labels are "Voices / Male / Charon / ..." — and
+  //    "voice" is a keyword in the chat list, so every narration block matched
+  //    chat regardless of what it said. The badge must describe the story, not
+  //    the controls sitting next to it.
   if (!icon) {
-    const text = (el.textContent || '').toLowerCase();
+    const paras = el.querySelectorAll('p');
+    const text = (paras.length
+      ? [...paras].map(n => n.textContent || '').join(' ')
+      : (el.textContent || '')).toLowerCase();
     for (const entry of _badgeTable()) {
       const words = entry && entry.words;
       if (Array.isArray(words) && words.some(w => w && text.includes(String(w).toLowerCase()))) {
@@ -4737,6 +4746,44 @@ function _addBlockBadge(el) {
   img.className = 'block-badge';
   img.alt = '';                                      // decorative; the prose says it
   el.appendChild(img);
+}
+
+// Blocks are appended from many different places, and only DM narration goes
+// through flushNewBlock(). Hooking a single renderer is how the first attempt
+// at this missed dice and tutor blocks entirely — they are the two that never
+// get a TTS bar, so they were not on the hook that had been picked.
+//
+// One observer instead. Every block that appears in the feed passes through
+// here regardless of which renderer built it, including any added later.
+//
+// dm-block is included even though a LIVE one is appended empty.
+// _addBlockBadge is idempotent and adds nothing when no keyword matches, so an
+// empty block simply gets no badge here and is badged later by flushNewBlock()
+// once its text has been typed. A REPLAYED dm-block arrives with its full text
+// and is badged immediately — the path that matters on page load.
+const _BADGE_ON_APPEND = new Set([
+  'dm-block', 'npc-block', 'dice-block', 'tutor-block', 'player-block',
+  'action-block', 'milestone-block', 'inspiration-block',
+]);
+
+function _watchBlocksForBadges() {
+  const feed = document.getElementById('text-content');
+  if (!feed || typeof MutationObserver === 'undefined') return;
+  new MutationObserver(records => {
+    for (const rec of records) {
+      for (const node of rec.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        const cls = (node.className || '').split(' ');
+        if (cls.some(c => _BADGE_ON_APPEND.has(c))) _addBlockBadge(node);
+      }
+    }
+  }).observe(feed, { childList: true });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _watchBlocksForBadges);
+} else {
+  _watchBlocksForBadges();
 }
 
 function flushNewBlock() {
