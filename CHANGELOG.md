@@ -57,7 +57,22 @@ executed for anyone.
   largest setting gave roughly half the words per line — a narrow ribbon,
   handed to the person who chose it because the text was hard to read. The
   measure now scales with the same variable, clamped against the viewport. At
-  scale 1 nothing changes. (#71)
+  scale 1 nothing changes.
+
+  Measured across window widths, in characters per line:
+
+  | viewport | 1.0 | 1.4 | 2.0 |
+  |---|---|---|---|
+  | 1440px | 82 | 62 | 44 |
+  | 1920px | 82 | 82 | 67 |
+  | 2560px | 82 | 82 | 82 |
+
+  The measure is fully preserved where there is room for it, and on a 1440px
+  window there is not: the sidebar and settings gutters reserve 570px between
+  them, so the column cannot exceed 870px however large the setting goes.
+  Collapsing either column gives the space back. Making it hold at 1440px means
+  the gutters shrinking with the scale, which is a layout change rather than a
+  one-line one. (#71)
 
 ### Changed
 
