@@ -10,6 +10,78 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-09-16 — Creature defenses, and three features that never ran
+
+Six fixes shipping together, so an existing install updates once and gets all
+of them. The theme that emerged partway through: half of these were not missing
+features. They were features already present in the source that had never
+executed for anyone.
+
+### Added
+
+- **Creature defenses.** Damage resistances, immunities, vulnerabilities and
+  condition immunities were in the SRD all along and were dropped by the
+  monster normaliser, so nothing could display them and the DM had no record to
+  consult. They now survive the build and appear in the creature block —
+  immunities on 136 of 334 creatures, condition immunities on 92, resistances
+  on 70, vulnerabilities on 15. `data/dnd5e_srd.json` is rebuilt, since this
+  repo ships the dataset rather than generating it per install; the rebuild was
+  checked to be additive, with no creature added, removed, or otherwise
+  changed. Nothing applies these to damage automatically — the DM reads and
+  adjudicates, as before. (#70)
+- **An XP award ledger.** An award left no trace except a number on a sheet, so
+  an award that never happened was invisible until a player noticed weeks later
+  that their total had not moved. `<campaign>/xp-ledger.jsonl` records each
+  one, and `xp.py check --campaign <name>` reconciles it against the sheets,
+  exiting non-zero when a sheet holds less than the ledger recorded. It detects
+  gaps; it does not fill them. (#73)
+
+### Fixed — features that existed and never ran
+
+- **Narration block badges.** A keyword table, a function that built the image,
+  and a CSS class — with nothing calling the function and no style rule for the
+  class. Nobody had ever seen a badge. Now wired and styled, and no longer
+  dependent on English: block KIND (NPC, dice, tutor) is badged with no word
+  list at all, so that path works in every language, and the semantic word
+  table can be replaced at runtime via `window.DND_BLOCK_BADGES` without
+  editing the display. (#72)
+- **A block arriving mid-narration no longer dumps the paragraph.** An NPC
+  line, dice result or tutor note used to snap the rest of the prose to its end
+  so it could land underneath — the reveal thrown away to deliver the thing
+  that usually explains the sentence being read. Blocks are held until the
+  typewriter drains, with a re-arming check so continuing narration is not cut
+  mid-paragraph, and an 8-second valve so a stalled reveal can never swallow a
+  dice roll the table is waiting on. A replay is never deferred. (#69)
+- **Text Size scaled the type but not the column.** `#text-content` held a
+  fixed 820px measure while the control multiplies the font up to 2.0, so the
+  largest setting gave roughly half the words per line — a narrow ribbon,
+  handed to the person who chose it because the text was hard to read. The
+  measure now scales with the same variable, clamped against the viewport. At
+  scale 1 nothing changes. (#71)
+
+### Changed
+
+- **The "not in the dataset" link is no longer a guess.** It slugified a name
+  and constructed a URL that nothing checked, so a name not matching the target
+  site's convention dead-ended, and an unknown category degraded to a bare slug
+  at the site root. Constructed links now point at an SRD reference verified
+  per category against a control, and it is the same SRD content without the
+  ads. A supplemental record still links to the page it was fetched from,
+  because that is where non-SRD content lives. A category with no verified
+  mapping now produces no link at all rather than a broken one. (#74)
+
+### Internal
+
+- 198 tests, up from 166. Block deferral is driven through node against the
+  real template rather than asserted from source, because "the function
+  exists" is exactly what was true of the badge code that had never run.
+- Two wiring bugs were caught during the work and are worth recording: the
+  badge override first read a global the server does not set, and the `xp.py
+  check` subcommand was first registered after `parse_args()` had already run,
+  so it died with "invalid choice" while its implementation sat there complete.
+  Both now have tests that fail if the wiring breaks again.
+
+
 ## [2.4.0] — 2026-07-24 — GM-side discipline: never play the player's side, table dials
 
 - **New Standard 14 — Never Play the Player's Side.** SKILL.md gains a hard constraint separating the DM's authority from the player's: never speak a PC's dialogue, narrate their private thoughts, or decide their actions; adjudicate each *declared* action on its own terms and let it resolve — call for the check or say in-fiction why it fails — rather than skipping it, quietly swapping it, or narrating past it to a preset outcome; and treat the party as exactly the named player characters, never inventing a companion into the party or putting words in a real player's mouth to move a scene along. Faster or weaker models drift into acting for the player without an explicit rule; this is that rule.
