@@ -10,12 +10,18 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 
 ## [Unreleased]
 
-## [2.5.0] — 2026-09-16 — Creature defenses, and three features that never ran
+## [2.5.0] — 2026-09-16 — Creature defenses, narration badges, and an XP ledger
 
-Six fixes shipping together, so an existing install updates once and gets all
-of them. The theme that emerged partway through: half of these were not missing
-features. They were features already present in the source that had never
-executed for anyone.
+Six fixes in one release, so an existing install updates once and receives all
+of them. Creatures now carry their resistances and immunities into play.
+Narration blocks are marked with a scene badge. XP awards are recorded and can
+be reconciled against a character sheet. A dice result no longer cuts off the
+sentence you were reading, and the reading column grows with the text size
+instead of narrowing.
+
+Several of these existed in the source already and had never reached a player.
+Where that is the case the entry says so, and the commit history has the full
+account.
 
 ### Added
 
