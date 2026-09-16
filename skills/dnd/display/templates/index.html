@@ -227,7 +227,14 @@
 
   /* ── Text content ── */
   #text-content {
-    max-width: 820px;
+    /* The measure scales WITH the type. A fixed column plus a font multiplier
+       that reaches 2.0 means the line holds roughly half the characters it did
+       at 1.0 — so the setting someone picks BECAUSE the prose is hard to read
+       hands them a ribbon of four-word lines and much more scrolling. Browser
+       zoom reflows the measure; a text-size control has to do it explicitly.
+       Clamped against the viewport so a large scale on a narrow window cannot
+       push the column under the sidebar. */
+    max-width: min(calc(820px * var(--text-scale, 1)), 92vw);
     margin: 0 auto;
     transition: opacity 0.35s ease;
     /* Reading text-size control — a font-size multiplier (NOT page zoom). The
@@ -4734,6 +4741,69 @@ function _flushForBlock() {
   clearTimeout(idleTimer);
 }
 
+// ── Deferring a block until the reveal actually finishes ─────────────
+//
+// A non-DM block arriving mid-narration used to call instantFlush(): the rest
+// of the paragraph snapped to its end and the block dropped in underneath.
+// That guarantees the block never lands mid-word, but it resolves the
+// collision by throwing the reveal away — and the thing that arrived is
+// usually the consequence of the sentence being read.
+//
+// So hold the block instead. The part that is easy to get wrong is that the
+// check must RE-ARM: narration often continues after the block arrives, so a
+// single "wait N ms then flush" lands in the middle of the next paragraph. It
+// has to keep asking whether the typewriter is idle and release only when it
+// really is.
+const PENDING_BLOCK_GAP = 320;    // ms of DRAINED typewriter before releasing
+const PENDING_BLOCK_MAX = 8000;   // ms before releasing regardless
+
+let _pendingBlocks = [];
+let _pendingTimer  = null;
+let _pendingSince  = 0;
+
+function _typewriterActive() {
+  return isTyping || charQueue.length > 0;
+}
+
+function _releasePending() {
+  const items = _pendingBlocks;
+  _pendingBlocks = [];
+  _pendingSince = 0;
+  for (const fn of items) {
+    try { fn(); } catch (e) { console.error('deferred block failed', e); }
+  }
+}
+
+function _schedulePendingFlush() {
+  if (_pendingTimer) return;
+  const tick = () => {
+    _pendingTimer = null;
+    // A stalled reveal must not swallow the queue. Without this valve a
+    // typewriter that never drains means a dice result the table is waiting
+    // on never appears at all, which is worse than the snap it replaced.
+    const waited = _pendingSince ? (Date.now() - _pendingSince) : 0;
+    if (_typewriterActive() && waited < PENDING_BLOCK_MAX) {
+      _pendingTimer = setTimeout(tick, PENDING_BLOCK_GAP);   // re-arm
+      return;
+    }
+    if (_typewriterActive()) instantFlush();   // valve fired: old behaviour
+    _releasePending();
+  };
+  _pendingTimer = setTimeout(tick, PENDING_BLOCK_GAP);
+}
+
+function _deferBlock(fn, isReplay) {
+  // A replay dumps history with no live reveal to protect, so deferring it
+  // would only delay the whole transcript.
+  if (isReplay || (!_typewriterActive() && _pendingBlocks.length === 0)) {
+    fn();
+    return;
+  }
+  if (!_pendingSince) _pendingSince = Date.now();
+  _pendingBlocks.push(fn);
+  _schedulePendingFlush();
+}
+
 // ── Shared: after inserting a non-DM block, re-establish cursor below it ──
 // If typing is still in progress, immediately open the next DM block so the
 // cursor appears below the inserted block rather than going invisible.
@@ -4748,6 +4818,10 @@ function _reanchorCursor() {
 
 // ── Player action block ──────────────────────────────────────────────
 function renderPlayerBlock(name, text, isReplay) {
+  _deferBlock(() => _renderPlayerBlockNow(name, text, isReplay), isReplay);
+}
+
+function _renderPlayerBlockNow(name, text, isReplay) {
   _flushForBlock();
 
   const block = document.createElement('div');
@@ -4779,6 +4853,10 @@ function renderPlayerBlock(name, text, isReplay) {
 
 // ── Player action intent block ───────────────────────────────────────
 function renderActionBlock(name, text, isReplay) {
+  _deferBlock(() => _renderActionBlockNow(name, text, isReplay), isReplay);
+}
+
+function _renderActionBlockNow(name, text, isReplay) {
   _flushForBlock();
 
   const block = document.createElement('div');
@@ -4805,6 +4883,10 @@ function renderActionBlock(name, text, isReplay) {
 
 // ── NPC dialogue block ───────────────────────────────────────────────
 function renderNPCBlock(name, text, isReplay) {
+  _deferBlock(() => _renderNPCBlockNow(name, text, isReplay), isReplay);
+}
+
+function _renderNPCBlockNow(name, text, isReplay) {
   _flushForBlock();
 
   const block = document.createElement('div');
@@ -4863,6 +4945,10 @@ function _diceRollIcon(text) {
 
 // ── Dice result block ─────────────────────────────────────────────────
 function renderDiceBlock(text, isReplay) {
+  _deferBlock(() => _renderDiceBlockNow(text, isReplay), isReplay);
+}
+
+function _renderDiceBlockNow(text, isReplay) {
   _flushForBlock();
 
   const block = document.createElement('div');
@@ -4909,6 +4995,10 @@ function renderDiceBlock(text, isReplay) {
 
 // ── Tutor / learning hint block ──────────────────────────────────────
 function renderTutorBlock(text, isReplay) {
+  _deferBlock(() => _renderTutorBlockNow(text, isReplay), isReplay);
+}
+
+function _renderTutorBlockNow(text, isReplay) {
   _flushForBlock();
 
   // Detect warning prefix (lines starting with ⚠ or WARNING:)
@@ -4956,6 +5046,10 @@ function renderTutorBlock(text, isReplay) {
 
 // ── Inspiration award block ────────────────────────────────────────────────
 function renderInspirationBlock(name, reason) {
+  _deferBlock(() => _renderInspirationBlockNow(name, reason), false);
+}
+
+function _renderInspirationBlockNow(name, reason) {
   _flushForBlock();
   const block = document.createElement('div');
   block.className = 'inspiration-block';
@@ -4984,6 +5078,10 @@ function renderInspirationBlock(name, reason) {
 // Distinct from the binary D&D 5e Inspiration block above. Use the label arg to name what
 // kind of reward was earned.
 function renderMilestoneBlock(name, label, reason, isReplay) {
+  _deferBlock(() => _renderMilestoneBlockNow(name, label, reason, isReplay), isReplay);
+}
+
+function _renderMilestoneBlockNow(name, label, reason, isReplay) {
   _flushForBlock();
   const block = document.createElement('div');
   block.className = 'milestone-block';
