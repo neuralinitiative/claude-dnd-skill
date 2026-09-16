@@ -1448,6 +1448,23 @@ def _norm_monster(r: dict) -> dict:
         parts.append(f"Action — {a.get('name','')}: {a.get('desc','')}")
     for a in r.get("legendary_actions", []):
         parts.append(f"Legendary — {a.get('name','')}: {a.get('desc','')}")
+
+    # Defenses. Upstream gives damage_* as lists of plain strings and
+    # condition_immunities as a list of {index,name,url} records, so they need
+    # different flattening. Dropping these was not cosmetic: halving or zeroing
+    # damage changes what a fight IS, and a GM with no record to consult will
+    # apply a half-remembered resistance inconsistently.
+    def _flat(key: str) -> str:
+        vals = r.get(key) or []
+        if not isinstance(vals, list):
+            return str(vals or "")
+        out = []
+        for v in vals:
+            if isinstance(v, dict):
+                v = v.get("name", "")
+            if v:
+                out.append(str(v))
+        return ", ".join(out)
     return {
         "name":  r.get("name", ""),
         "index": r.get("index", _slugify(r.get("name", ""))),
@@ -1468,6 +1485,10 @@ def _norm_monster(r: dict) -> dict:
         "cha":   r.get("charisma", 10),
         "alignment": r.get("alignment", ""),
         "languages": r.get("languages", ""),
+        "resistances":   _flat("damage_resistances"),
+        "immunities":    _flat("damage_immunities"),
+        "vulnerabilities": _flat("damage_vulnerabilities"),
+        "condition_immunities": _flat("condition_immunities"),
     }
 
 

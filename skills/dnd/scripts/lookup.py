@@ -289,6 +289,21 @@ def _fmt_monster(r: dict) -> str:
     row1 = " | ".join(f"{a:3}" for a in abbr)
     row2 = " | ".join(f"{r.get(k,10):3}({_mod(r.get(k,10)):+d})" for k in keys)
     lines += [row1, row2, ""]
+
+    # Defenses before languages: a GM scanning this block mid-combat is looking
+    # for them, not for what the creature speaks. Omitted entirely when empty
+    # rather than printed as "Resistant: —", so an absent line reads as "none"
+    # and never as "unknown".
+    for label, key in (("Vulnerable", "vulnerabilities"),
+                       ("Resistant", "resistances"),
+                       ("Immune", "immunities"),
+                       ("Condition Immune", "condition_immunities")):
+        if r.get(key):
+            lines.append(f"{label}: {r[key]}")
+    if any(r.get(k) for k in ("vulnerabilities", "resistances",
+                              "immunities", "condition_immunities")):
+        lines.append("")
+
     if r.get("languages"):
         lines.append(f"Languages: {r['languages']}")
     desc = r.get("description", "")
