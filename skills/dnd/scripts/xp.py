@@ -26,6 +26,8 @@ Usage:
 import sys
 import os
 import re
+import json
+import datetime
 import argparse
 import subprocess
 import pathlib
@@ -286,6 +288,110 @@ def cmd_calc(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+# ─── Award ledger ─────────────────────────────────────────────────────────────
+#
+# An award used to leave no trace except a number on a sheet. So when one did
+# not happen — the GM moved to the next scene without running this — there was
+# nothing to compare against and no way to find out except a player noticing
+# weeks later that their total had not moved, by which point the encounters
+# that should have fed it are gone.
+#
+# Append-only and additive: a new file per campaign, no existing format
+# changed. `xp.py check` reconciles it against the sheets.
+
+LEDGER_NAME = "xp-ledger.jsonl"
+
+
+def _ledger_path(campaign: str) -> pathlib.Path:
+    return CAMPAIGNS_DIR / campaign / LEDGER_NAME
+
+
+def _record_award(campaign: str, entries: list, note: str) -> None:
+    """Append one line per character. Never raises — a ledger write must not
+    cost a player their XP, which is already on the sheet by the time we run."""
+    try:
+        path = _ledger_path(campaign)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(
+            timespec="seconds")
+        with open(path, "a", encoding="utf-8") as f:
+            for e in entries:
+                f.write(json.dumps({
+                    "at": stamp,
+                    "character": e["name"],
+                    "awarded": e["awarded"],
+                    "total_after": e["total_after"],
+                    "note": note,
+                }, ensure_ascii=False) + "\n")
+    except Exception as exc:                      # noqa: BLE001
+        print(f"xp.py: warning — could not write the award ledger: {exc}",
+              file=sys.stderr)
+
+
+def _read_ledger(campaign: str) -> list:
+    path = _ledger_path(campaign)
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue                              # a torn line is not fatal
+    return rows
+
+
+def cmd_check(args: argparse.Namespace) -> None:
+    """Reconcile the ledger against the sheets and report drift.
+
+    Does NOT fill gaps. It answers "did every award we recorded actually land",
+    which is the question nobody could ask before. Filling automatically would
+    need to know which encounters happened, and nothing in the campaign format
+    records that yet.
+    """
+    campaign = args.campaign
+    rows = _read_ledger(campaign)
+    if not rows:
+        print(f"  No award ledger for '{campaign}' yet "
+              f"({_ledger_path(campaign)}).")
+        print("  It starts filling from the next `xp.py award`.")
+        return
+
+    by_char = {}
+    for r in rows:
+        by_char.setdefault(r.get("character", "?"), []).append(r)
+
+    print(f"\n  XP ledger — {campaign}  ({len(rows)} awards recorded)\n")
+    drift = 0
+    for name, entries in sorted(by_char.items()):
+        expected = entries[-1].get("total_after")
+        try:
+            actual, _level = _read_char_state(_find_char_path(campaign, name))
+        except (FileNotFoundError, ValueError):
+            print(f"    {name:<16} ledger says {expected}, no character file")
+            drift += 1
+            continue
+        if expected is not None and actual != expected:
+            # A sheet BELOW the ledger is the silent-discard case. A sheet
+            # ABOVE it just means XP was awarded some other way, which is
+            # normal and worth showing rather than flagging.
+            marker = "  ← sheet is BEHIND the ledger" if actual < expected else ""
+            print(f"    {name:<16} sheet {actual:<7} ledger {expected:<7}{marker}")
+            if actual < expected:
+                drift += 1
+        else:
+            print(f"    {name:<16} sheet {actual:<7} matches")
+    print()
+    if drift:
+        print(f"  {drift} character(s) hold less XP than the ledger recorded.")
+        print("  Re-run the missing award, or correct the sheet by hand.")
+        sys.exit(1)
+    print("  Every recorded award is reflected on its sheet.")
+
+
 def cmd_award(args: argparse.Namespace) -> None:
     """Calculate XP, update character files, and push to display."""
     campaign   = args.campaign
@@ -340,11 +446,14 @@ def cmd_award(args: argparse.Namespace) -> None:
     # Apply XP to each character
     print()
     any_levelup = False
+    _ledger_entries = []
     for c in chars:
         old_xp  = c["xp"]
         new_xp  = old_xp + per_player
         leveled = _write_char_xp(c["path"], new_xp, c["level"])
         _push_xp_display(c["name"], new_xp, c["level"])
+        _ledger_entries.append({"name": c["name"], "awarded": per_player,
+                                "total_after": new_xp})
 
         next_lvl   = _next_level_xp(c["level"])
         up_tag     = f"  ⚠ LEVEL {c['level'] + 1} UP!" if leveled else ""
@@ -353,6 +462,10 @@ def cmd_award(args: argparse.Namespace) -> None:
         print(f"  {c['name']}: {old_xp:,} + {per_player:,} = {new_xp:,} / {next_lvl:,}{rem_note}{up_tag}")
         if leveled:
             any_levelup = True
+
+    # Recorded AFTER the sheets are written, so the ledger never claims an
+    # award that did not land.
+    _record_award(campaign, _ledger_entries, note=f"{diff} {enc_type}")
 
     if any_levelup:
         print("\n  Level-up pending — run /dnd character level-up")
@@ -396,10 +509,15 @@ def main() -> None:
     award_p.add_argument("--note",       metavar="TEXT",
                          help="Brief label for this award (printed only, not stored)")
 
+    check_p = sub.add_parser(
+        "check", help="Reconcile the award ledger against the character sheets")
+    check_p.add_argument("--campaign", required=True, metavar="NAME")
+
     args = parser.parse_args()
 
     if   args.command == "calc":  cmd_calc(args)
     elif args.command == "award": cmd_award(args)
+    elif args.command == "check": cmd_check(args)
     else:
         parser.print_help()
         sys.exit(0)
