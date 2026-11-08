@@ -37,6 +37,8 @@ Usage:
   python3 campaign_graph.py <subcommand> --campaign <name> [args]
 
 Subcommands:
+  init           create the campaign's empty graph.json (idempotent; refuses
+                 to overwrite a graph that already has nodes or edges)
   add-node       --type T --name N [--id ID] [--tags t1,t2] [--summary S]
   add-edge       --from FROM --to TO --type T [--since N] [--until N] [--note S]
   set-disposition --to NPC_OR_FACTION --level L [--since N] [--note S]
@@ -444,6 +446,38 @@ def cmd_subgraph(args) -> int:
     seeds = [_resolve_or_die(data, s, "seed") for s in args.seed if s]
     sub = _expand(data, seeds, args.hops, args.at_session)
     _emit_subgraph(sub, args.at_session)
+    return 0
+
+
+def cmd_init(args) -> int:
+    """Create an empty graph.json for the campaign, once.
+
+    SKILL-commands.md has called `/dm:dnd graph init` a hard requirement and
+    said every graph subcommand runs `campaign_graph.py <subcommand>`, but
+    there was no `init` here -- argparse rejected it -- so the documented
+    first step could not be run. This creates the file and nothing else:
+    proposing nodes and edges from the campaign's markdown stays a reviewed,
+    DM-approved step through add-node / add-edge.
+
+    Idempotent on an empty graph. A graph that already holds nodes or edges
+    is never overwritten.
+    """
+    camp = find_campaign(args.campaign)
+    if not camp.is_dir():
+        print(f"error: no campaign directory for '{args.campaign}' at {camp}", file=sys.stderr)
+        return 1
+    p = _graph_path(args.campaign)
+    if p.exists():
+        data = _load(args.campaign)
+        if data["nodes"] or data["edges"]:
+            print(f"error: {p} already holds {len(data['nodes'])} nodes and "
+                  f"{len(data['edges'])} edges — not overwriting it", file=sys.stderr)
+            return 1
+        print(f"graph already initialized for '{args.campaign}' (empty): {p}")
+        return 0
+    _save(args.campaign, {"version": 1, "nodes": [], "edges": []})
+    print(f"graph initialized for '{args.campaign}': {p}")
+    print("next: add-node / add-edge for the approved seed list")
     return 0
 
 
@@ -880,6 +914,12 @@ def main() -> int:
 
     def add_camp(sp):
         sp.add_argument("--campaign", required=True)
+
+    sp = sub.add_parser("init",
+        help="create the campaign's empty graph.json (idempotent; never "
+             "overwrites a graph that has nodes or edges)")
+    add_camp(sp)
+    sp.set_defaults(func=cmd_init)
 
     sp = sub.add_parser("add-node")
     add_camp(sp)

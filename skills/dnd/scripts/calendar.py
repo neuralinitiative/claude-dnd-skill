@@ -28,6 +28,10 @@ Usage:
     python3 calendar.py -c <campaign> rest short    # +1 hour
     python3 calendar.py -c <campaign> rest long     # +8 hours
 
+    Advancing or resting also advances tracker.py's timed effects by the same
+    in-game time, and a rest applies the tracker's rest bookkeeping, so the
+    clock and the effects cannot disagree.
+
     # Show current date/time
     python3 calendar.py -c <campaign> now
 
@@ -209,6 +213,14 @@ def cmd_init(campaign: str, args) -> None:
     print(f"Calendar initialised: {_format_date(cal)}")
 
 
+def _tracker():
+    # Imported lazily: tracker.py is a sibling script, and only the commands
+    # that move the clock need it.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import tracker
+    return tracker
+
+
 def cmd_advance(campaign: str, amount: int, unit: str) -> None:
     cal = _load(campaign)
     if not cal:
@@ -223,6 +235,7 @@ def cmd_advance(campaign: str, amount: int, unit: str) -> None:
     label = f"+{amount} {unit}"
     print(f"  {label} → {_format_date(cal)}")
     _send_date(cal)
+    _tracker().advance(campaign, total_hours * 60)
 
 
 def cmd_rest(campaign: str, rest_type: str) -> None:
@@ -241,6 +254,7 @@ def cmd_rest(campaign: str, rest_type: str) -> None:
     _save(campaign, cal)
     print(f"  {label} → {_format_date(cal)}")
     _send_date(cal)
+    _tracker().cmd_rest(campaign, rest_type)
 
 
 def cmd_now(campaign: str) -> None:

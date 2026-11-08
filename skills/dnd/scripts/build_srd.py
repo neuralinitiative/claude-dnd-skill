@@ -60,6 +60,10 @@ BITS_FILES_2014 = {
     # the flow said "apply racial bonuses" and nothing could check it.
     "races":       "5e-SRD-Races.json",
     "subraces":    "5e-SRD-Subraces.json",
+    # The choices a level-up owes: Eldritch Invocations, Pact Boons and
+    # Fighting Styles. Only those three families are kept from the file;
+    # every other feature normalizes to a nameless record and is dropped.
+    "class_options": "5e-SRD-Features.json",
 }
 
 # 2024 file roster — partial upstream coverage as of 2026-05.
@@ -1379,6 +1383,32 @@ def _norm_spell(r: dict) -> dict:
     }
 
 
+def _format_armor_ac(r: dict) -> str:
+    """Render an armor record's AC the way the rules state it.
+
+    Upstream carries `armor_class` as {base, dex_bonus, max_bonus}. Formatting
+    only `base` printed every armor as "AC N + DEX": plate read "AC 18 + DEX",
+    a chain shirt lost its cap of 2, and a shield read "AC 2 + DEX" as though
+    it replaced armor rather than adding to it. Heavy armor takes no DEX,
+    medium caps it, and a shield is a flat bonus on top of whatever is worn.
+    """
+    ac = r.get("armor_class") or {}
+    if not ac:
+        return ""
+    base = ac.get("base", "")
+    cat = r.get("armor_category", "")
+    if isinstance(cat, dict):
+        cat = cat.get("name", "")
+    # The 2024 records carry no armor_category, so the index is the fallback.
+    if str(cat).lower() == "shield" or r.get("index") == "shield":
+        return f"AC +{base}"
+    if not ac.get("dex_bonus"):
+        return f"AC {base}"
+    if ac.get("max_bonus"):
+        return f"AC {base} + DEX (max {ac['max_bonus']})"
+    return f"AC {base} + DEX"
+
+
 def _norm_equipment(r: dict) -> dict:
     cat  = r.get("equipment_category", {})
     cost = r.get("cost", {})
@@ -1401,13 +1431,55 @@ def _norm_equipment(r: dict) -> dict:
                          .strip() if dmg else "",
         "damage_2h":     f"{dmg2.get('damage_dice','')} {dmg2.get('damage_type',{}).get('name','')}"
                          .strip() if dmg2 else "",
-        "ac":            f"AC {ac.get('base','')} + DEX" if ac else "",
+        "ac":            _format_armor_ac(r),
         "properties":    props,
         "range":         f"{rng.get('normal','?')}/{rng.get('long','?')} ft"
                          if rng and rng.get("normal") else "",
         "throw_range":   f"{trng.get('normal','?')}/{trng.get('long','?')} ft" if trng else "",
         "stealth_disadv":r.get("stealth_disadvantage", False),
         "str_minimum":   r.get("str_minimum"),
+    }
+
+
+#: Parent feature index -> option kind, for the choices a level-up owes.
+_CLASS_OPTION_PARENTS = {
+    "eldritch-invocations":   "invocation",
+    "pact-boon":              "pact_boon",
+    "fighter-fighting-style": "fighting_style",
+    "paladin-fighting-style": "fighting_style",
+    "ranger-fighting-style":  "fighting_style",
+}
+
+
+def _norm_class_option(r: dict) -> dict:
+    """An invocation, pact boon or fighting style; a nameless record otherwise.
+
+    The name drops upstream's "Eldritch Invocation: " / "Fighting Style: "
+    prefix so it reads the way the class table names it. Prerequisites are
+    flattened to text ("Pact of the Blade", "level 5", "eldritch blast").
+    """
+    parent = (r.get("parent") or {}).get("index", "")
+    kind = _CLASS_OPTION_PARENTS.get(parent)
+    if not kind:
+        return {"name": ""}
+    name = re.sub(r"^(Eldritch Invocation|Fighting Style):\s*", "", r.get("name", ""))
+    prereqs = []
+    for p in r.get("prerequisites", []) or []:
+        if p.get("type") == "level":
+            prereqs.append(f"level {p.get('level')}")
+        elif p.get("type") in ("spell", "feature"):
+            ref = str(p.get(p["type"], "")).rstrip("/").rsplit("/", 1)[-1]
+            prereqs.append(ref.replace("-", " ").title() if p["type"] == "feature"
+                           else ref.replace("-", " "))
+    cls = r.get("class", {})
+    return {
+        "name":          name,
+        "index":         r.get("index", _slugify(name)),
+        "kind":          kind,
+        "class":         cls.get("name", "") if isinstance(cls, dict) else str(cls),
+        "level":         r.get("level"),
+        "prerequisites": prereqs,
+        "description":   _join_desc(r.get("desc", [])),
     }
 
 
@@ -1667,6 +1739,7 @@ def _build_5ebits(ruleset: str = DEFAULT_RULESET) -> tuple[dict, list[str]]:
         "monsters":    _norm_monster,
         "races":       _norm_race,
         "subraces":    _norm_subrace,
+        "class_options": _norm_class_option,
         # 2024-only categories — keep raw shape (no custom normaliser yet);
         # they pass through as-is so lookup.py can consume them.
         "weapon_mastery_properties": lambda r: r,

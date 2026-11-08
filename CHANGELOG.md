@@ -10,6 +10,219 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-11-08 — Timed effects on in-game time, rests and rolls that follow the rules, 2024 backgrounds and level-up choices, and short replies that survive every script
+
+Twenty changes in one release, so an existing install updates once and receives
+all of them. Each defect below was reproduced against this repo before it was
+fixed, and each fix carries a test that fails with the defect put back.
+
+### Fixed — a short rest deleted an eight-hour spell, and a long rest woke the dying
+
+**Timed effects ran on the wall clock, and both rests wiped them.** `tracker.py`
+started minute and hour effects with `started_at=time.time()`, so an effect
+expired after that many real hours whatever happened in the fiction, and the
+rest procedures ran `tracker.py clear`, which set every entity's effects to an
+empty list. Together: a one-hour short rest deleted an eight-hour Mage Armor
+outright, while an in-game eight-hour rest expired nothing, because eight hours
+had not passed at the table.
+
+Durations are now counted in in-game minutes. They move when a turn ticks (a
+round is six seconds), when `tracker.py effect advance <time>` runs, and when
+`calendar.py advance` or `calendar.py rest` moves the date — so a journey or a
+rest runs effects down by exactly the time it took. `tracker.py rest
+short|long` does the same for a campaign without a calendar. **Neither rest
+wipes anything.** An existing `tracker.json` keeps the remaining time each
+effect showed at the moment of the update, and only in-game time moves it from
+then on.
+
+`clear` is the end of an encounter again, not part of a rest: it ends
+encounter conditions, effects counted in rounds, and concentration no surviving
+effect holds, and keeps minute and hour effects, exhaustion and petrification.
+`clear --all` also resets death saves, but never a dead character's.
+
+**The long-rest procedure stated three rules wrongly.** It said "restore all HP,
+half max Hit Dice (round up)" and then `clear --all`:
+
+- Hit Dice regained are half the character's total **rounded down, minimum 1**
+  (2014), or every spent die (2024). Rounding up gave a level-1 or odd-level
+  character an extra die every night.
+- A character at 0 HP gains **nothing** from a long rest; RAW they need at least
+  1 HP. "Restore all HP" brought the dying back on a night's sleep.
+- `clear --all` wiped exhaustion outright (a long rest removes one level) and
+  reset the death saves of a character still lying at 0 HP.
+
+The procedure now gates on life state first, names the correct Hit Dice rule
+for each ruleset, lowers exhaustion by one, and ends concentration. Exhaustion
+is tracked in levels (`condition add <name> exhausted` adds one; 6 is death),
+and the 2024 row of the ruleset table now says death at 6 rather than "max 10".
+
+### Fixed — rolls were labelled and resolved by the wrong rules
+
+- **Every natural 20 was a CRITICAL HIT.** `dice.py` labelled any nat 20
+  CRITICAL HIT and any nat 1 FUMBLE, whatever the roll was for — and the display
+  flashes its full-screen crit overlay on exactly that text, so a Perception
+  check or a saving throw announced a crit to the table. `--vs
+  check|save|attack|death` now says what the d20 is for: only an attack crits
+  or fumbles, a death save reports regaining 1 HP on a 20 and two failures on a
+  1, and a check or save just notes the natural roll. Without `--vs` nothing is
+  called a crit. `--dc N` appends PASS / FAIL by arithmetic (for an attack, N
+  is the target's AC).
+- **`combat.py attack --crit` did nothing.** `resolve_attack` accepted `is_crit`
+  and never read it, so an attack on a paralyzed or unconscious creature within
+  5 feet rolled ordinary damage. `--crit` now makes any hit a critical hit; a
+  natural 1 still misses.
+- **Topple saved with the attacker's modifier.** The target's CON save added
+  the ATTACKER's ability modifier, and the DC assumed +2 proficiency — so a
+  strong attacker made its own target harder to knock down, and a level-5
+  fighter's DC was one short. The DC is now 8 + the attacker's ability mod +
+  `--prof`; the save is rolled with `--target-con-save` when it is known, and
+  otherwise the DC is reported for the DM to roll with the target's own bonus.
+- **Two random sources.** `dice.py`, `combat.py`, the dice server and
+  `ability-scores.py` used `random` while `dice_player.py` and the display used
+  `secrets`. Every game die now comes from `secrets`. (`oracle.py` keeps a
+  seedable `random.Random`; its tables are not dice and its tests depend on the
+  seed.)
+
+### Fixed — every armor in the dataset added DEX
+
+**`build_srd.py` formatted armor AC from `base` alone, as `AC {base} + DEX`.**
+Upstream carries `dex_bonus` and `max_bonus` beside it, and both were ignored,
+so the bundled dataset read "Plate Armor — AC 18 + DEX", "Chain Shirt — AC 13 +
+DEX" with no cap, and "Shield — AC 2 + DEX" as though a shield replaced armor.
+Heavy armor now takes no DEX, medium carries `(max 2)`, and a shield reads
+`AC +2`. `data/dnd5e_srd.json` was patched by re-formatting the upstream armor
+records with the corrected function: 10 of 13 armor strings change, and every
+other field of every record was checked to be unchanged.
+
+### Fixed — importing a Chinese or Japanese module read the whole book at once
+
+**`import_campaign.py` chunked with `text.split()` and rejoined with `" ".join`.**
+Chinese and Japanese put no spaces between words, so a 48,000-character Chinese
+module counted as one word and came back as one chunk — a single 144 KB read,
+the exact thing chunking exists to prevent. And rejoining on a space flattened
+every newline in every language, so markdown headings, tables and stat blocks
+arrived as one long line, which is the structure the import step finds chapters
+by. Chunks are now cut on line boundaries by weight, with a CJK character
+counting four, so a chunk is about 4,000 English words or about 6,000 CJK
+characters and the chunks reassemble to the source exactly. `--chunk N` is
+unchanged.
+
+### Fixed — short replies vanished, and straight quotes curled
+
+- **A one- or two-word reply disappeared in most scripts.** The display's
+  chrome filter drops any line of three characters or fewer without
+  `[a-zA-Z]{2}`, as escape-code residue. That test is ASCII: 好的, はい。, 不。,
+  Да. and Нет — an NPC's whole answer — were dropped while "No." stayed.
+  Letters are now counted with `str.isalpha`, and in a script without case one
+  letter is already a word (不 is "no"). Escape residue such as `[0m` is still
+  dropped.
+- **Straight quotes rendered as closing quotes.** IM Fell English draws U+0022
+  and U+0027 with the outline of ” and ’, so `"Halt," he said` read as
+  ”Halt,” he said. A font face covering only those two code points, mapped to a
+  serif already on the machine, now sits ahead of IM Fell in every stack that
+  names it. Curly quotes still come from IM Fell, and no font file is shipped.
+
+### Fixed — `graph init` was documented and did not exist (#78 — @qclayssen)
+
+Thanks to **@qclayssen** for spotting this. `SKILL-commands.md` calls
+`/dm:dnd graph init` a hard requirement, and says every graph subcommand runs
+`campaign_graph.py <subcommand>` — but there was no `init` subcommand, and
+argparse rejected it, so the first documented step of the graph flow could not
+be taken. `campaign_graph.py init --campaign <name>` now creates the empty
+`graph.json`: idempotent on an empty graph, and it refuses to overwrite one
+that already holds nodes or edges. Proposing the seed nodes and edges stays a
+reviewed step through `add-node` / `add-edge`. The rest of the proposal in #78
+is a separate discussion and is not part of this release.
+
+### Added — rules the character script now applies
+
+- **2024 background ability increases.** In SRD 5.2 the increase comes from the
+  background: +2 and +1, or +1 to all three, among its three listed abilities.
+  `calc --background <acolyte|criminal|sage|soldier> --background-asi
+  STR=2,CON=1` (or `+1/+1/+1`) applies it and prints base / background / final.
+  An unknown background, an ability it does not list, or a shape the rules do
+  not allow exits non-zero; a missing choice is reported as still to assign.
+- **Armor Class.** `calc --armor <srd-armor-index> [--shield]
+  [--fighting-style defense]` computes AC from the corrected armor records, with
+  Unarmored Defense for a barbarian (CON) or monk (WIS, not with a shield), the
+  heavy-armor Strength requirement and the Stealth note.
+- **Hit Dice and long rests.** `hitdie` spends dice on a short rest (roll + CON
+  mod, never below 0 in 2014 or 1 in 2024, HP capped at max) and refuses a
+  character at 0 HP or with none left. `rest long` reports what the rest
+  restores and gives nothing to a character at 0 HP.
+- **The choices a level owes.** `levelup` printed HP and proficiency only, so a
+  fighter reaching 6 had no ASI prompted and a warlock reaching 2 no
+  invocations. It now lists the Ability Score Improvement (Epic Boon at 19 in
+  2024), the subclass level by class and ruleset, Eldritch Invocations learned,
+  the 2014 Pact Boon, the Fighting Style (and the Champion's additional style),
+  and the retroactive HP when the CON modifier rose. Invocations follow the SRD
+  Warlock table: the 5e-database Levels file lists one more at levels 4 and 6,
+  which would owe a warlock an invocation the rules do not grant.
+- **Invocations, pact boons and fighting styles in the dataset.** 32
+  invocations, 3 pact boons and 14 fighting styles from the SRD, added as
+  `class_options`; bundled dataset 1,467 → 1,516 records, so an existing install
+  gets them on update without a rebuild. `lookup.py invocation <name>` (also
+  `fighting-style`, `pact-boon`) prints one, and `levelup` names the options
+  available at the new level.
+
+### Added — modifiers an effect grants
+
+`tracker.py effect start ... --mod +1d4 --on attack,save` records what an
+effect does to rolls — Bless's +1d4, Bane's -1d4. `status` shows it, and
+`dice.py --effects <name> -c <campaign>` and `combat.py attack --effects <name>`
+roll it into the result, so a Bless the tracker holds is added rather than
+remembered. The modifier ends with its effect.
+
+### Added — table guidance
+
+- When combat starts: flirting, sparring, a figure of speech or a spell on a
+  friendly creature does not roll initiative, and a creature already down is
+  not a combatant.
+- Call for a check only when failure would change the scene, and open each turn
+  on what changed.
+- A style request made mid-session is written to `## DM Style Notes` at once,
+  replacing an earlier note it contradicts — and the section now exists in the
+  `state.md` template, which the load procedure already read from.
+- An out-of-character question is answered in the language it was asked; level
+  and XP come from the record; damage and loot are checked against the sheet
+  before they are applied, especially after a context compaction.
+- **One word per game term.** A table playing in another language settles one
+  translation for each game term and records it in the new `## Glossary` section
+  of `state.md`, read at load, so a condition or a faction does not drift
+  between two words that read as two different things.
+
+### Added — narration clips are cached
+
+Every press of a block's play button called Gemini, so replaying a line, or a
+second player pressing play on the same block, paid for the same audio again.
+Clips are now cached on disk, keyed by a hash of the voice, the model and the
+text, bounded at 64 MB by default (`DND_TTS_CACHE_MB`; `0` turns it off) with
+the least-recently-played clips evicted first. `tts.py --test` always calls
+the API, so it still checks the key.
+
+### Fixed — the browser voice reads a block in the language it is written in
+
+The free fallback chose its voice from the page's declared language first, and
+the display page always declares English, so a Japanese or Russian block went
+to an English voice that reads it as silence or noise. The block's own script
+now comes first where it names a language: kana is Japanese, hangul Korean, Han
+Chinese, and Thai, Greek and Hebrew are read directly; a script several
+languages share (Cyrillic, Arabic) takes the browser's own language in that
+script, else the script's most common one. Latin text leaves the existing order
+alone.
+
+### Added — the name registry hears an echo, in every script
+
+- `name_registry.py check` warns when a proposed name's first name, titles
+  stripped, matches a player character's — "Lady Willa Torne" beside a PC named
+  "Willa Finch" passed as unique, and left two people at the table answering to
+  "Willa". `name_registry.py clashes` lists every existing case.
+- The session-log prose scan matched `[A-Z][a-z]+`, so "Élodie Marchand",
+  "Søren Halvik" and "Дмитрий Орлов" were invisible to it. Words are now Unicode
+  letters tested for case, and Chinese, Japanese and Korean names — which have
+  no capitals — are found by the honorific that follows them (田中さん,
+  李明先生, 민수씨). An unspaced Chinese run is never cut into a guessed name.
+
 ## [2.6.0] — 2026-10-09 — Narration audio without an API key, racial bonuses that are applied rather than remembered, and a rename that works in every script
 
 ### Fixed — "apply racial bonuses" was a request to the model, with nothing behind it

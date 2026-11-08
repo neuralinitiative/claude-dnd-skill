@@ -197,6 +197,46 @@ class VoiceSelectionTests(unittest.TestCase):
         self.assertIsNone(got["v"])
 
 
+class ScriptLanguageTests(unittest.TestCase):
+    """This page's <html lang> is a static "en", so the page language alone
+    sent a Japanese block to an English voice. The block's own script is the
+    first preference where it names a language."""
+
+    VOICES = [{"name": "A", "lang": "en-US"}, {"name": "B", "lang": "ja-JP"},
+              {"name": "C", "lang": "ko-KR"}, {"name": "D", "lang": "zh-CN"},
+              {"name": "E", "lang": "ru-RU"}]
+
+    def _pick(self, text, nav_langs=("en-US",)):
+        return _run("console.log(JSON.stringify(_ttsPickBrowserVoice(%s)))" % json.dumps(text),
+                    doc_lang="en", nav_langs=list(nav_langs), voices=self.VOICES)["lang"]
+
+    def test_the_text_script_outranks_a_static_page_language(self):
+        self.assertEqual(self._pick("ランタンが揺れた。"), "ja-JP")
+        self.assertEqual(self._pick("등불이 흔들린다."), "ko-KR")
+        self.assertEqual(self._pick("灯笼摇曳。"), "zh-CN")
+
+    def test_a_shared_script_takes_the_browsers_language_that_uses_it(self):
+        """Cyrillic is Russian, Ukrainian, Bulgarian...: the browser's own
+        Cyrillic language wins, else the script's most common one -- never
+        the static English page language."""
+        voices = self.VOICES + [{"name": "F", "lang": "uk-UA"}]
+        got = _run("console.log(JSON.stringify(_ttsPickBrowserVoice(%s)))"
+                   % json.dumps("Ліхтар блимнув."),
+                   doc_lang="en", nav_langs=["uk-UA", "en-US"], voices=voices)
+        self.assertEqual(got["lang"], "uk-UA")
+        self.assertEqual(self._pick("Фонарь мигнул."), "ru-RU")
+
+    def test_latin_text_leaves_the_chain_alone(self):
+        self.assertEqual(self._pick("The lantern gutters."), "en-US")
+
+    def test_the_speak_path_passes_the_text(self):
+        # The call site, not the declaration: `function _ttsPickBrowserVoice(text)`
+        # contains the same words, so a bare substring check passes with the
+        # text never handed over.
+        src = _js_source()
+        self.assertRegex(src, r"const voice = _ttsPickBrowserVoice\(text\);")
+
+
 class ChunkerTests(unittest.TestCase):
 
     CAP = 220

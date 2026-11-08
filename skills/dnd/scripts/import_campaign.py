@@ -15,7 +15,8 @@ Supported input formats:
 Usage:
   python3 import_campaign.py <filepath>            # print full extracted text
   python3 import_campaign.py <filepath> --info     # print file info + page/word count only
-  python3 import_campaign.py <filepath> --chunk N  # print chunk N of ~4000 words (for large PDFs)
+  python3 import_campaign.py <filepath> --chunk N  # print chunk N (~4000 words of Latin text,
+                                                   #  ~6000 characters of CJK; line breaks kept)
   python3 import_campaign.py <filepath> --chunks   # print total number of chunks
 
 Output is UTF-8 plain text, written to stdout. Claude reads this and maps it to campaign files.
@@ -27,6 +28,7 @@ import argparse
 import re
 import subprocess
 import textwrap
+import unicodedata
 
 # This script prints full module text (often Chinese) to stdout. Without this,
 # a GBK console/pipe raises UnicodeEncodeError on the first non-ASCII line.
@@ -35,7 +37,18 @@ try:
 except Exception:
     pass
 
-CHUNK_WORDS = 4000  # words per chunk for large sources
+CHUNK_WORDS = 4000  # nominal words per chunk, kept for --info
+
+# Chunks are measured in WEIGHT, not words. Splitting on whitespace counted a
+# Chinese or Japanese module as a handful of "words" -- a 48,000-character
+# Chinese module was 1 word and 1 chunk, a single 144 KB read -- and rejoining
+# with " ".join flattened every module's lines, so headings, tables and stat
+# blocks arrived as one line. A character weighs 1, and a wide (CJK, Hangul)
+# character weighs 4: English averages about six characters per word with its
+# space, so 24,000 weight is ~4,000 English words or ~6,000 CJK characters --
+# comparable reads either way.
+CHUNK_WEIGHT = 24000
+WIDE_WEIGHT = 4
 
 
 def order_blocks(blocks, page_width, gutter_frac=0.05, min_col_share=0.15):
@@ -211,20 +224,51 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
+def _weight(ch: str) -> int:
+    return WIDE_WEIGHT if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def split_chunks(text: str, budget: int = CHUNK_WEIGHT) -> list:
+    """Split text into chunks of at most `budget` weight, on line boundaries.
+
+    Lines are kept whole, newlines included, so "".join(chunks) == text. A
+    single line heavier than the budget (a paragraph of CJK prose with no
+    breaks) is cut by characters rather than returned oversized.
+    """
+    chunks, cur, cur_w = [], [], 0
+    for line in text.splitlines(keepends=True):
+        w = sum(_weight(c) for c in line)
+        if w > budget:
+            # Too heavy to keep whole: top up the current chunk with it, then
+            # carry on in budget-sized pieces.
+            for c in line:
+                cw = _weight(c)
+                if cur and cur_w + cw > budget:
+                    chunks.append("".join(cur))
+                    cur, cur_w = [], 0
+                cur.append(c)
+                cur_w += cw
+            continue
+        if cur and cur_w + w > budget:
+            chunks.append("".join(cur))
+            cur, cur_w = [], 0
+        cur.append(line)
+        cur_w += w
+    if cur:
+        chunks.append("".join(cur))
+    return chunks or [""]
+
+
 def chunk_text(text: str, chunk_index: int) -> str:
-    """Return chunk N (0-indexed) of ~CHUNK_WORDS words."""
-    words = text.split()
-    start = chunk_index * CHUNK_WORDS
-    end = start + CHUNK_WORDS
-    chunk_words = words[start:end]
-    if not chunk_words:
+    """Return chunk N (0-indexed), with the source's line structure intact."""
+    chunks = split_chunks(text)
+    if chunk_index < 0 or chunk_index >= len(chunks):
         return ""
-    return " ".join(chunk_words)
+    return chunks[chunk_index]
 
 
 def total_chunks(text: str) -> int:
-    wc = word_count(text)
-    return max(1, (wc + CHUNK_WORDS - 1) // CHUNK_WORDS)
+    return len(split_chunks(text))
 
 
 def file_info(path: str, text: str) -> str:
@@ -235,6 +279,7 @@ def file_info(path: str, text: str) -> str:
         f"File:   {os.path.basename(path)}",
         f"Type:   {ext or 'unknown'}",
         f"Words:  {wc:,}",
+        f"Chars:  {len(text):,}",
         f"Chunks: {chunks}  (--chunk 0 through --chunk {chunks - 1})",
     ]
     return "\n".join(lines)
@@ -246,7 +291,7 @@ def main():
     parser.add_argument("--info", action="store_true", help="Print file info only")
     parser.add_argument("--chunks", action="store_true", help="Print total chunk count")
     parser.add_argument("--chunk", type=int, default=None, metavar="N",
-                        help="Print chunk N (0-indexed, ~4000 words each)")
+                        help="Print chunk N (0-indexed; ~4000 words or ~6000 CJK characters)")
     args = parser.parse_args()
 
     if not os.path.exists(args.filepath):

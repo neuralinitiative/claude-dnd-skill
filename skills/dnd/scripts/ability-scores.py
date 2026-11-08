@@ -15,7 +15,7 @@ Point Buy cost table (D&D 5e standard):
     Cost:   0   1   2   3   4   5   7   9
 """
 
-import random
+import secrets
 import sys
 
 
@@ -36,7 +36,7 @@ def roll_set() -> list[int]:
     """Roll 4d6 drop lowest, return six scores."""
     scores = []
     for _ in range(6):
-        rolls = sorted([random.randint(1, 6) for _ in range(4)], reverse=True)
+        rolls = sorted([secrets.randbelow(6) + 1 for _ in range(4)], reverse=True)
         kept = rolls[:3]
         scores.append(sum(kept))
     return scores

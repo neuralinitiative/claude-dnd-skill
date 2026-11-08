@@ -12,7 +12,16 @@ Usage:
         Prints the current combat tracker table from a JSON state blob.
 
     python3 combat.py attack --atk <bonus> --ac <target_ac> --dmg <notation> [--crit]
-        Resolves a single attack roll and damage.
+                             [--effects <entity> -c <campaign>]
+        Resolves a single attack roll and damage. --crit makes any hit a
+        critical hit (a paralyzed or unconscious target within 5 ft); a
+        natural 1 still misses. --effects adds the attack and damage
+        modifiers tracker.py holds for the attacker (e.g. Bless).
+
+    python3 combat.py attack ... --mastery topple --ability-mod 3 --prof 2 \
+                             [--target-con-save 1]
+        Topple's DC is 8 + the attacker's ability mod + proficiency; the save
+        is rolled with the TARGET's CON save bonus, or left to the DM.
 
 Input / Output is JSON-friendly so the DM (Claude) can pipe state between turns.
 
@@ -32,13 +41,19 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception: pass
 
 import json
-import random
+import os
+import secrets
 import sys
 import re
 
 
+def d(sides: int) -> int:
+    # secrets, the generator dice.py, dice_player.py and the display use.
+    return secrets.randbelow(sides) + 1
+
+
 def roll(n, sides):
-    return [random.randint(1, sides) for _ in range(n)]
+    return [d(sides) for _ in range(n)]
 
 
 def dice(notation: str) -> tuple[int, list[int]]:
@@ -56,7 +71,7 @@ def dice(notation: str) -> tuple[int, list[int]]:
 def initiative_order(combatants: list[dict]) -> list[dict]:
     """Roll d20+dex_mod for each combatant, sort descending."""
     for c in combatants:
-        raw = random.randint(1, 20)
+        raw = d(20)
         c["initiative_roll"] = raw
         c["initiative"] = raw + c.get("dex_mod", 0)
         c["conditions"] = []
@@ -78,11 +93,39 @@ def print_tracker(combatants: list[dict], round_num: int = 1):
     print(f"{'='*68}\n")
 
 
-def resolve_attack(atk_bonus: int, target_ac: int, dmg_notation: str, is_crit: bool = False) -> dict:
-    raw = random.randint(1, 20)
-    total_atk = raw + atk_bonus
+def _roll_mod(value: str, double_dice: bool = False) -> tuple[int, list[int]]:
+    """Roll a tracked modifier such as '+1d4', '-1d4' or '+2'."""
+    m = re.match(r'^([+-]?)(?:(\d*)d(\d+)|(\d+))$', value.strip().lower())
+    if not m:
+        raise ValueError(f"Bad modifier: {value}")
+    sign = -1 if m.group(1) == "-" else 1
+    if m.group(3):
+        n = int(m.group(2) or 1) * (2 if double_dice else 1)
+        rolls = roll(n, int(m.group(3)))
+        return sign * sum(rolls), rolls
+    return sign * int(m.group(4)), []
+
+
+def resolve_attack(atk_bonus: int, target_ac: int, dmg_notation: str, is_crit: bool = False,
+                   attack_mods: list | None = None, damage_mods: list | None = None) -> dict:
+    """Roll one attack.
+
+    `is_crit` is the auto-crit case: an attack that hits a paralyzed or
+    unconscious creature within 5 feet is a critical hit whatever the d20
+    shows. It was accepted and never read, so `--crit` did nothing. A
+    natural 1 still misses. `attack_mods` / `damage_mods` are
+    [(label, '+1d4'), ...] from tracker.active_modifiers.
+    """
+    raw = d(20)
+    mod_rolls = []
+    mod_total = 0
+    for label, value in attack_mods or []:
+        v, rs = _roll_mod(value)
+        mod_total += v
+        mod_rolls.append({"label": label, "value": value, "rolls": rs, "total": v})
+    total_atk = raw + atk_bonus + mod_total
     hit = raw == 20 or (raw != 1 and total_atk >= target_ac)
-    crit = raw == 20
+    crit = raw == 20 or (is_crit and hit)
 
     result = {
         "d20": raw,
@@ -91,7 +134,9 @@ def resolve_attack(atk_bonus: int, target_ac: int, dmg_notation: str, is_crit: b
         "target_ac": target_ac,
         "hit": hit,
         "crit": crit,
+        "auto_crit": bool(is_crit and hit and raw != 20),
         "fumble": raw == 1,
+        "attack_mods": mod_rolls,
     }
 
     if hit:
@@ -101,7 +146,12 @@ def resolve_attack(atk_bonus: int, target_ac: int, dmg_notation: str, is_crit: b
             extra, extra_rolls = dice(dmg_notation.split("+")[0].split("-")[0])
             dmg += extra
             rolls += extra_rolls
-        result["damage"] = dmg
+        for label, value in damage_mods or []:
+            # Extra damage dice are doubled on a crit like the weapon's own.
+            v, rs = _roll_mod(value, double_dice=crit)
+            dmg += v
+            rolls += rs
+        result["damage"] = max(0, dmg)
         result["damage_rolls"] = rolls
         result["damage_notation"] = dmg_notation
 
@@ -112,11 +162,13 @@ def format_attack(r: dict) -> str:
     lines = []
     flag = ""
     if r["crit"]:
-        flag = " *** CRITICAL HIT! ***"
+        flag = (" *** CRITICAL HIT (target helpless within 5 ft)! ***" if r.get("auto_crit")
+                else " *** CRITICAL HIT! ***")
     elif r["fumble"]:
         flag = " *** FUMBLE — automatic miss ***"
 
-    atk_str = f"d20({r['d20']}) + {r['attack_bonus']} = {r['total']} vs AC {r['target_ac']}"
+    mods = "".join(f" + {m['label']} {m['value']}({m['total']:+d})" for m in r.get("attack_mods", []))
+    atk_str = f"d20({r['d20']}) + {r['attack_bonus']}{mods} = {r['total']} vs AC {r['target_ac']}"
     outcome = "HIT" if r["hit"] else "MISS"
     lines.append(f"Attack: {atk_str} — {outcome}{flag}")
 
@@ -157,24 +209,28 @@ MASTERY_PROPERTIES = {
                 "before the start of your next turn."),
     "slow":    ("On hit, the target's Speed is reduced by 10 ft until the "
                 "start of your next turn."),
-    "topple":  ("On hit, target makes a CON save (DC 8 + prof + STR mod) or "
-                "is knocked Prone."),
+    "topple":  ("On hit, target makes a CON save (DC 8 + the attacker's "
+                "ability mod + proficiency) or is knocked Prone."),
     "vex":     ("On hit, you have Advantage on your next attack roll against "
                 "this target before the end of your next turn."),
 }
 
 
 def apply_mastery(property_name: str, hit: bool, ability_mod: int = 0,
-                  save_dc: int | None = None) -> dict:
+                  save_dc: int | None = None, prof: int | None = None,
+                  target_save: int | None = None) -> dict:
     """Return a text + structured outcome for a weapon mastery property.
 
     Args:
         property_name: lowercased property key (cleave, graze, nick, etc.)
         hit: whether the attack hit
-        ability_mod: STR or DEX modifier used for the attack — needed for
-            graze damage and topple save DC if save_dc is omitted
-        save_dc: optional explicit save DC (Topple defaults to 8 + 2 + mod
-            without proficiency context; pass an explicit DC to override).
+        ability_mod: the ATTACKER's STR or DEX modifier for the attack —
+            graze damage, and part of the Topple DC
+        save_dc: optional explicit Topple DC; otherwise 8 + ability_mod + prof
+        prof: the attacker's proficiency bonus. Not assumed: a level-5
+            fighter's is +3, and a guessed +2 sets the wrong DC.
+        target_save: the TARGET's CON saving-throw bonus. The save is rolled
+            only when it is known; otherwise the DC is reported for the DM.
 
     Returns a dict with:
       - property: canonical property name
@@ -218,19 +274,33 @@ def apply_mastery(property_name: str, hit: bool, ability_mod: int = 0,
     out["applies"] = True
 
     if prop == "topple":
-        # Roll save if DC provided
-        dc = save_dc or (8 + 2 + ability_mod)  # 8 + (assumed prof 2) + mod
-        save_roll = random.randint(1, 20)
-        save_total = save_roll + ability_mod  # CON save uses target's CON;
-        # caller should pass save_dc directly and add the target's CON mod
-        # in their own roll instead. This is a fallback when no DC supplied.
+        # The save used to add the ATTACKER's ability mod to the target's d20
+        # and assume +2 proficiency for the DC, so a strong attacker made its
+        # own target harder to knock down. The DC belongs to the attacker;
+        # the save bonus belongs to the target.
+        if save_dc is not None:
+            dc = save_dc
+        elif prof is not None:
+            dc = 8 + ability_mod + prof
+        else:
+            out["text"] = (f"Topple — target makes a CON save vs DC 8 + proficiency "
+                           f"{ability_mod:+d} or is knocked Prone (pass --prof to "
+                           f"compute the DC)")
+            return out
+        out["save_dc"] = dc
+        if target_save is None:
+            out["text"] = (f"Topple — target makes a CON save vs DC {dc} or is knocked "
+                           f"Prone (roll it with the target's CON save bonus)")
+            return out
+        save_roll = d(20)
+        save_total = save_roll + target_save
         passed = save_total >= dc
-        out["save_dc"]     = dc
         out["save_roll"]   = save_roll
+        out["save_bonus"]  = target_save
         out["save_total"]  = save_total
         out["save_passed"] = passed
         out["text"]        = (f"Topple — target rolls CON save vs DC {dc}: "
-                              f"d20({save_roll}) + mod = {save_total} "
+                              f"d20({save_roll}) {target_save:+d} = {save_total} "
                               f"→ {'saved' if passed else 'PRONE'}")
         return out
 
@@ -256,9 +326,19 @@ def list_masteries() -> str:
     lines.append("")
     lines.append("Usage in combat:")
     lines.append("  python3 combat.py attack --atk N --ac N --dmg DICE --mastery <property>")
-    lines.append("  python3 combat.py attack ... --mastery topple --topple-dc 14")
+    lines.append("  python3 combat.py attack ... --mastery topple --ability-mod 3 --prof 2 "
+                 "--target-con-save 1")
     lines.append("  python3 combat.py attack ... --mastery graze --ability-mod 4")
     return "\n".join(lines)
+
+
+def _opt(args: list, flag: str):
+    return args[args.index(flag) + 1] if flag in args and args.index(flag) + 1 < len(args) else None
+
+
+def _int_opt(args: list, flag: str):
+    v = _opt(args, flag)
+    return int(v) if v is not None else None
 
 
 if __name__ == "__main__":
@@ -292,7 +372,20 @@ if __name__ == "__main__":
         ac = int(args[args.index("--ac") + 1])
         dmg = args[args.index("--dmg") + 1]
         crit = "--crit" in args
-        result = resolve_attack(atk, ac, dmg, crit)
+        attack_mods = damage_mods = None
+        if "--effects" in args:
+            who = args[args.index("--effects") + 1]
+            camp = (_opt(args, "-c") or _opt(args, "--campaign")
+                    or os.environ.get("CAMPAIGN"))
+            if not camp:
+                print("combat.py: --effects needs -c <campaign>", file=sys.stderr)
+                sys.exit(2)
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import tracker
+            attack_mods = tracker.active_modifiers(camp, who, "attack")
+            damage_mods = tracker.active_modifiers(camp, who, "damage")
+        result = resolve_attack(atk, ac, dmg, crit,
+                                attack_mods=attack_mods, damage_mods=damage_mods)
 
         # Optional 2024 weapon mastery
         if "--mastery" in args:
@@ -302,7 +395,9 @@ if __name__ == "__main__":
             save_dc = (int(args[args.index("--topple-dc") + 1])
                        if "--topple-dc" in args else None)
             mastery = apply_mastery(mastery_name, result["hit"],
-                                    ability_mod=ability_mod, save_dc=save_dc)
+                                    ability_mod=ability_mod, save_dc=save_dc,
+                                    prof=_int_opt(args, "--prof"),
+                                    target_save=_int_opt(args, "--target-con-save"))
             result["mastery"]      = mastery
             result["mastery_text"] = mastery["text"]
 
@@ -315,7 +410,8 @@ if __name__ == "__main__":
         # Ad-hoc mastery resolution (no attack roll context)
         args = sys.argv[2:]
         if not args:
-            print("Usage: combat.py mastery <property> [--hit] [--ability-mod N] [--topple-dc N]")
+            print("Usage: combat.py mastery <property> [--hit] [--ability-mod N] "
+                  "[--prof N] [--target-con-save N] [--topple-dc N]")
             sys.exit(1)
         prop = args[0]
         hit  = "--hit" in args
@@ -324,7 +420,8 @@ if __name__ == "__main__":
         save_dc = (int(args[args.index("--topple-dc") + 1])
                    if "--topple-dc" in args else None)
         out = apply_mastery(prop, hit=hit, ability_mod=ability_mod,
-                            save_dc=save_dc)
+                            save_dc=save_dc, prof=_int_opt(args, "--prof"),
+                            target_save=_int_opt(args, "--target-con-save"))
         print(json.dumps(out, indent=2))
 
     else:

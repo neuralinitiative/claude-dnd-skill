@@ -75,6 +75,19 @@
 <link rel="apple-touch-icon" sizes="180x180"      href="/icons/app_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/app_icon_192.png">
 <style>
+  /* IM Fell English draws U+0022 and U+0027 with the outline of a CLOSING
+     curly quote, so a straight quote in narration ("Halt," he said) rendered
+     as ”Halt,” and every apostrophe-led word looked mis-typed. This face
+     covers only those two code points and maps them to a neutral serif
+     already on the machine; it sits ahead of IM Fell in the stack, so every
+     other character still comes from IM Fell. No font file is shipped. */
+  @font-face {
+    font-family: 'Fell Straight Quotes';
+    src: local('Georgia'), local('Times New Roman'), local('TimesNewRomanPSMT'),
+         local('Liberation Serif'), local('DejaVu Serif'), local('Noto Serif');
+    unicode-range: U+0022, U+0027;
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
@@ -82,7 +95,7 @@
     overflow: hidden;
     background: #000;
     color: #d4c4a0;
-    font-family: 'IM Fell English', Georgia, serif;
+    font-family: 'Fell Straight Quotes', 'IM Fell English', Georgia, serif;
     font-size: 20px;
     line-height: 1.85;
   }
@@ -1644,7 +1657,7 @@
     width: 100%; box-sizing: border-box;
     background: rgba(8,5,2,0.85); border: 1px solid rgba(180,140,60,0.18);
     border-radius: 3px; color: rgba(220,200,160,0.9);
-    font-family: 'IM Fell English', serif; font-size: 13px;
+    font-family: 'Fell Straight Quotes', 'IM Fell English', serif; font-size: 13px;
     padding: 8px 10px; resize: none; outline: none;
     transition: border-color 0.15s ease;
   }
@@ -1693,7 +1706,7 @@
     margin-bottom: 2px;
   }
   .staged-text {
-    font-family: 'IM Fell English', serif; font-size: 11.5px;
+    font-family: 'Fell Straight Quotes', 'IM Fell English', serif; font-size: 11.5px;
     color: rgba(200,175,120,0.82); word-break: break-word;
   }
   .staged-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-top: 2px; }
@@ -1811,7 +1824,7 @@
     color: rgba(220,150,100,0.9); flex: 1;
   }
   .device-card-ip {
-    font-family: 'IM Fell English', serif; font-size: 11px;
+    font-family: 'Fell Straight Quotes', 'IM Fell English', serif; font-size: 11px;
     color: rgba(200,160,120,0.7); margin-right: 4px;
   }
   .device-approve-btn, .device-deny-btn {
@@ -6511,17 +6524,47 @@ if (_TTS_HAS_BROWSER) {
   speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 }
 
-function _ttsPickBrowserVoice() {
+// The language the text itself is written in, where its script says. This
+// page's <html lang> is a static "en" whatever the campaign is played in, so
+// without this a Japanese or Russian block went to an English voice, which
+// reads it as silence or noise. A script shared by several languages takes
+// the browser's first language that uses it, else the script's most common
+// one; Latin text returns null and leaves the choice to the chain below.
+const _TTS_SHARED_SCRIPTS = [
+  [/[\u0400-\u04ff]/, ['ru', 'uk', 'bg', 'sr', 'mk', 'be', 'kk', 'ky', 'mn', 'tg']],
+  [/[\u0600-\u06ff]/, ['ar', 'fa', 'ur', 'ps']],
+];
+function _ttsScriptLang(text) {
+  const t = String(text || '');
+  if (/[\u3040-\u30ff]/.test(t)) return 'ja';
+  if (/[\uac00-\ud7af\u1100-\u11ff]/.test(t)) return 'ko';
+  if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(t)) return 'zh';
+  if (/[\u0e00-\u0e7f]/.test(t)) return 'th';
+  if (/[\u0370-\u03ff]/.test(t)) return 'el';
+  if (/[\u0590-\u05ff]/.test(t)) return 'he';
+  for (const [re, langs] of _TTS_SHARED_SCRIPTS) {
+    if (!re.test(t)) continue;
+    const nav = (navigator.languages && navigator.languages.length
+      ? navigator.languages : [navigator.language])
+      .map(l => String(l || '').slice(0, 2).toLowerCase());
+    return nav.find(l => langs.includes(l)) || langs[0];
+  }
+  return null;
+}
+
+function _ttsPickBrowserVoice(text) {
   const voices = speechSynthesis.getVoices() || [];
   if (!voices.length) return null;
-  // Preference order: the page's declared language, then the browser's
-  // accept-language chain, then English, then any voice at all -- a voice in
-  // the wrong accent still beats silence. No single locale is hardcoded.
+  // Preference order: the language the text's script implies, then the
+  // page's declared language, then the browser's accept-language chain,
+  // then English, then any voice at all -- a voice in the wrong accent still
+  // beats silence. No single locale is hardcoded.
   const prefs = [];
   const want = t => {
     t = String(t || '').slice(0, 2).toLowerCase();
     if (t && !prefs.includes(t)) prefs.push(t);
   };
+  want(_ttsScriptLang(text));
   want(document.documentElement.lang);
   (navigator.languages && navigator.languages.length
     ? navigator.languages : [navigator.language]).forEach(want);
@@ -6572,7 +6615,7 @@ function _ttsChunkText(text) {
 
 function _ttsBrowserSpeak(btn, text) {
   speechSynthesis.cancel();
-  const voice = _ttsPickBrowserVoice();
+  const voice = _ttsPickBrowserVoice(text);
   const chunks = _ttsChunkText(text);
   let last = null;
   chunks.forEach(chunk => {

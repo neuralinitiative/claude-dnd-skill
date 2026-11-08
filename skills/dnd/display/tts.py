@@ -7,11 +7,18 @@ degrade to text-only narration.
 
 stdlib only — no requests, no google-cloud-sdk, no dependencies.
 Setup walkthrough: docs/SKILL-tts.md.
+
+Synthesized clips are cached on disk, keyed by a hash of (voice, model,
+text), so replaying a block plays the saved clip instead of spending the
+user's Gemini quota on the same request again. The cache is bounded
+(DND_TTS_CACHE_MB, default 64) and evicts least-recently-played clips.
+DND_TTS_CACHE_DIR moves it; DND_TTS_CACHE_MB=0 turns it off.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import urllib.error
@@ -49,6 +56,78 @@ MAX_TEXT_CHARS = 2000
 # Request timeout — Gemini Flash TTS typical latency is 1-3s; we give it
 # substantial headroom for cold-start or transient slowness.
 DEFAULT_TIMEOUT = 30.0
+
+
+# ── Clip cache ──────────────────────────────────────────────────────────────
+
+DEFAULT_CACHE_MB = 64
+
+
+def cache_dir() -> Path:
+    raw = os.environ.get("DND_TTS_CACHE_DIR", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".cache" / "claude-dnd" / "tts"
+
+
+def _cache_limit_bytes() -> int:
+    try:
+        mb = float(os.environ.get("DND_TTS_CACHE_MB", DEFAULT_CACHE_MB))
+    except ValueError:
+        mb = DEFAULT_CACHE_MB
+    return max(0, int(mb * 1024 * 1024))
+
+
+def cache_key(voice: str, text: str, model: str = GEMINI_TTS_MODEL) -> str:
+    """Hash of everything that changes the audio. The text is never a filename."""
+    h = hashlib.sha256()
+    for part in (voice, model, text):
+        h.update(part.encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def cache_get(key: str) -> Optional[bytes]:
+    if _cache_limit_bytes() <= 0:
+        return None
+    p = cache_dir() / f"{key}.pcm"
+    try:
+        data = p.read_bytes()
+    except OSError:
+        return None
+    if not data:
+        return None
+    try:
+        os.utime(p, None)   # mark as recently played, for eviction order
+    except OSError:
+        pass
+    return data
+
+
+def cache_put(key: str, pcm: bytes) -> None:
+    """Store a clip, then evict least-recently-played clips over the bound.
+
+    Best effort: a cache that cannot be written costs a re-synthesis later,
+    never the narration now.
+    """
+    limit = _cache_limit_bytes()
+    if limit <= 0 or not pcm or len(pcm) > limit:
+        return
+    d = cache_dir()
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / f"{key}.tmp"
+        tmp.write_bytes(pcm)
+        os.replace(tmp, d / f"{key}.pcm")
+        clips = sorted(d.glob("*.pcm"), key=lambda f: f.stat().st_mtime)
+        total = sum(f.stat().st_size for f in clips)
+        for f in clips:
+            if total <= limit:
+                break
+            total -= f.stat().st_size
+            f.unlink()
+    except OSError:
+        pass
 
 
 # ── Key resolution ──────────────────────────────────────────────────────────
@@ -91,6 +170,7 @@ def synthesize_strict(
     text: str,
     voice: str = DEFAULT_VOICE,
     timeout: float = DEFAULT_TIMEOUT,
+    use_cache: bool = True,
 ) -> bytes:
     """Call Gemini Flash TTS and return raw L16 PCM bytes (24 kHz mono).
 
@@ -108,6 +188,11 @@ def synthesize_strict(
 
     if voice not in VALID_VOICES:
         voice = DEFAULT_VOICE
+
+    key_hash = cache_key(voice, text)
+    cached = cache_get(key_hash) if use_cache else None
+    if cached is not None:
+        return cached
 
     body = {
         "contents": [{"role": "user", "parts": [{"text": text}]}],
@@ -159,6 +244,7 @@ def synthesize_strict(
 
     if not pcm:
         raise TtsError("empty pcm payload")
+    cache_put(key_hash, pcm)
     return pcm
 
 
@@ -212,7 +298,8 @@ def _cli() -> int:
     print(f"Text:  {args.text!r}")
     print("Calling Gemini Flash TTS…")
     try:
-        pcm = synthesize_strict(args.text, args.voice)
+        # --test checks the key and the API, so it never answers from cache.
+        pcm = synthesize_strict(args.text, args.voice, use_cache=False)
     except TtsError as e:
         print(f"  FAIL: {e}")
         return 1

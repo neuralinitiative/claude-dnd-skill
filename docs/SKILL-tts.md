@@ -95,7 +95,7 @@ To expand the dropdown to Gemini's full 30 voices, edit `_TTS_VOICES_MALE` / `_T
 
 ## Per-browser cost surfacing
 
-Each player clicking the speaker button on the same narration block produces a **separate** call to Gemini — there's no server-side caching by content hash. A 4-player table where everyone clicks every block roughly 4× the per-block cost. If that becomes a concern, two practical mitigations:
+Synthesized clips are cached on disk, keyed by a hash of the voice, the model and the text, so replaying a block — or a second player clicking the same block in the same voice — plays the saved clip and makes no call to Gemini. The cache lives at `~/.cache/claude-dnd/tts/` (move it with `DND_TTS_CACHE_DIR`), is bounded at 64 MB by default (`DND_TTS_CACHE_MB`; least-recently-played clips are evicted first), and `DND_TTS_CACHE_MB=0` turns it off. `tts.py --test` always calls the API, so it still checks your key. A block in a different voice is a different clip and is billed once. Two further mitigations if cost is a concern:
 
 1. Use **Auto Narrate on the casting TV only** — players hear the audio from the TV speaker and don't click their own phones.
 2. Set a daily spend cap on your Google billing project at [console.cloud.google.com/billing](https://console.cloud.google.com/billing).

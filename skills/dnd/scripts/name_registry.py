@@ -33,6 +33,7 @@ CLI:
     python3 name_registry.py lookup <name>     # case-insensitive
     python3 name_registry.py add --name N --type T --campaign C --session N
     python3 name_registry.py retire --name N --campaign C [--replaced-by NEW]
+    python3 name_registry.py clashes [--campaign C]   # NPCs sharing a PC's first name
 """
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ import sys
 
 from paths import campaigns_dir, characters_dir, _root
 from utf8io import read_text, TextDecodeError
+from script_ranges import NO_DELIMITER_SCRIPT
 
 # Windows UTF-8 fix: default piped stdout is cp936/GBK, which mangles Chinese
 try:
@@ -284,6 +286,77 @@ def all_taken_slugs() -> set[str]:
     return set(data["entries"].keys())
 
 
+# ── First-name clashes with player characters ──────────────────────────────
+
+#: Titles stripped before comparing first names, so "Lady Willa Torne" is
+#: compared as "Willa". Lower-case, without the trailing full stop.
+HONORIFICS = {
+    "lady", "lord", "sir", "dame", "master", "mistress", "madam", "madame",
+    "mr", "mrs", "ms", "miss", "dr", "doctor", "captain", "capt", "commander",
+    "lieutenant", "sergeant", "general", "admiral", "father", "mother",
+    "brother", "sister", "elder", "saint", "st", "king", "queen", "prince",
+    "princess", "duke", "duchess", "baron", "baroness", "count", "countess",
+    "old", "young", "high", "archmage", "magister", "maester",
+}
+
+
+def first_name(name: str) -> str | None:
+    """The given name, honorifics stripped and casefolded; None if unknowable.
+
+    A name written without spaces in a script that has no word delimiters
+    (田中太郎, 李明) has no recoverable first-name boundary, so it is not
+    compared rather than compared wrongly.
+    """
+    n = re.sub(r"\s*\([^)]*\)\s*", " ", name or "").strip()
+    words = [w.strip(".,;:") for w in n.split()]
+    words = [w for w in words if w]
+    while len(words) > 1 and words[0].casefold() in HONORIFICS:
+        words = words[1:]
+    if not words:
+        return None
+    if len(words) == 1 and NO_DELIMITER_SCRIPT.search(words[0]) and len(words[0]) > 1:
+        return None
+    return words[0].casefold()
+
+
+def first_name_clashes(name: str, campaign: str | None = None,
+                       entries: dict | None = None) -> list[str]:
+    """PC names that share `name`'s first name ("Lady Willa Torne" vs "Willa Finch").
+
+    Two characters answering to the same name is the confusion a table notices
+    first: the player hears their own name in an NPC's dialogue. An identical
+    full name is the duplicate check's job; this is the near-miss it lets by.
+    """
+    fn = first_name(name)
+    if not fn:
+        return []
+    entries = entries if entries is not None else _load().get("entries", {})
+    out = []
+    for e in entries.values():
+        if e.get("type") != "pc" or slug(e["name"]) == slug(name):
+            continue
+        if campaign and campaign not in e.get("currently_active_in", []):
+            continue
+        if first_name(e["name"]) == fn:
+            out.append(e["name"])
+    return sorted(out)
+
+
+def all_first_name_clashes(campaign: str | None = None) -> list[tuple[str, list[str]]]:
+    """Every NPC entry whose first name matches a PC's: [(npc, [pcs])]."""
+    entries = _load().get("entries", {})
+    out = []
+    for e in sorted(entries.values(), key=lambda x: x["name"].lower()):
+        if e.get("type") != "npc":
+            continue
+        if campaign and campaign not in e.get("currently_active_in", []):
+            continue
+        pcs = first_name_clashes(e["name"], campaign, entries)
+        if pcs:
+            out.append((e["name"], pcs))
+    return out
+
+
 def check(name: str) -> dict:
     """Check whether a proposed name collides with the registry.
 
@@ -312,26 +385,88 @@ def check(name: str) -> dict:
 
     if severity == "none":
         return {"name": name, "is_duplicate": False, "entry": None,
-                "severity": severity, "message": "registry check disabled"}
+                "severity": severity, "message": "registry check disabled",
+                "first_name_clash": []}
 
+    clash = first_name_clashes(name)
+    clash_msg = (f"; first name matches player character {', '.join(clash)}"
+                 if clash else "")
     e = lookup(name)
     if not e:
         return {"name": name, "is_duplicate": False, "entry": None,
-                "severity": severity,
-                "message": f"'{name}' is unique — safe to use"}
+                "severity": severity, "first_name_clash": clash,
+                "message": (f"'{name}' is unique{clash_msg}" if clash
+                            else f"'{name}' is unique — safe to use")}
 
     where = ", ".join(e.get("currently_active_in", [])) or "(retired everywhere)"
     src = e.get("source", "canonical")
     msg = (f"'{name}' was first used in {e['first_campaign']} S{e['first_session']} "
-           f"({src}); currently active in: {where}")
+           f"({src}); currently active in: {where}{clash_msg}")
     return {"name": name, "is_duplicate": True, "entry": e,
-            "severity": severity, "message": msg}
+            "severity": severity, "message": msg, "first_name_clash": clash}
 
 
 # ── Prose scan (--include-prose) ──────────────────────────────────────────
 
-# Match capitalized 2-3 word sequences as candidate proper nouns.
-_PROSE_NAME_PAT = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b")
+# Candidate proper nouns are runs of 2-3 capitalized words. This was
+# `[A-Z][a-z]+`, which is ASCII-only: "Élodie Marchand", "Søren Halvik" and
+# "Дмитрий Орлов" never matched, so the scan was blind to every accented,
+# Cyrillic or Greek name. Words are now tokenised as Unicode letters and
+# tested with str.isupper / str.islower.
+_PROSE_WORD = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
+
+
+def _is_title_word(w: str) -> bool:
+    return len(w) >= 2 and w[0].isupper() and w[1:].replace("'", "").replace(
+        "’", "").replace("-", "").islower()
+
+
+# Han, Kana and Hangul have no case, so capitalization finds nothing in them.
+# A name there is found by the honorific that follows it: a run of two to four
+# Han or Katakana characters directly before さん/様/殿/先生/くん/ちゃん/氏, or
+# before 先生/小姐/大人/夫人/姑娘/公子, and a Hangul word before 씨/님. The run
+# must be the WHOLE run of those characters -- 你看到李明先生 is not cut down to
+# 李明, because nothing in unspaced Chinese says where the name starts, and a
+# wrong cut invents a name.
+_CJK_HONORIFIC_NAME = re.compile(
+    r"(?<![\u3400-\u4dbf\u4e00-\u9fff\u30a0-\u30ff])"
+    r"([\u3400-\u4dbf\u4e00-\u9fff\u30a0-\u30ff]{2,4})"
+    r"(?:さん|様|さま|殿|先生|くん|君|ちゃん|氏|小姐|大人|夫人|姑娘|公子)")
+_HANGUL_HONORIFIC_NAME = re.compile(r"(?<![\uac00-\ud7af])([\uac00-\ud7af]{2,4})(?:씨|님)")
+
+
+def _prose_name_candidates(text: str) -> list[str]:
+    """Runs of 2-3 capitalized words, plus honorific-marked CJK names.
+
+    The cased-script half reproduces the old regex's grouping exactly -- a run
+    of four capitalized words yields its first three -- with Unicode letters.
+    """
+    out: list[str] = []
+    run: list = []          # match objects of consecutive capitalized words
+    last_end = None
+
+    def flush():
+        i = 0
+        while len(run) - i >= 2:
+            take = run[i:i + 3]
+            out.append(text[take[0].start():take[-1].end()])
+            i += len(take)
+        run.clear()
+
+    for m in _PROSE_WORD.finditer(text):
+        gap = text[last_end:m.start()] if last_end is not None else None
+        contiguous = gap is not None and gap != "" and gap.strip() == ""
+        if _is_title_word(m.group(0)):
+            if run and not contiguous:
+                flush()
+            run.append(m)
+        else:
+            flush()
+        last_end = m.end()
+    flush()
+    out.extend(m.group(1) for m in _CJK_HONORIFIC_NAME.finditer(text))
+    out.extend(m.group(1) for m in _HANGUL_HONORIFIC_NAME.finditer(text))
+    return out
 
 # Bigram/trigram stopwords — common phrases that look like names but aren't.
 # Add more as you encounter false positives.
@@ -385,11 +520,15 @@ def _scan_prose(camp_dir: pathlib.Path,
         if not f.exists():
             continue
         text = f.read_text(encoding="utf-8", errors="replace")
-        for m in _PROSE_NAME_PAT.finditer(text):
-            cand = m.group(1).strip()
+        for cand in _prose_name_candidates(text):
+            cand = cand.strip()
             if cand in _PROSE_STOP_PHRASES:
                 continue
             words = cand.split()
+            if len(words) == 1:
+                # An honorific-marked CJK name: none of the Latin filters apply.
+                candidates.add(cand)
+                continue
             first, second = words[0], words[1]
             if first in _PROSE_STOP_FIRST_WORDS:
                 continue
@@ -523,6 +662,11 @@ def main() -> int:
     pc.add_argument("--json", action="store_true",
                     help="emit JSON instead of human text")
 
+    pcl = sub.add_parser("clashes",
+                         help="list NPCs whose first name (honorifics stripped) "
+                              "matches a player character's; exit 1 if any")
+    pcl.add_argument("--campaign", help="limit to this campaign's active set")
+
     pa = sub.add_parser("add", help="record a new name")
     pa.add_argument("--name", required=True)
     pa.add_argument("--type", choices=["npc", "pc"], default="npc")
@@ -576,9 +720,19 @@ def main() -> int:
             if result["is_duplicate"]:
                 marker = "WARN" if result["severity"] == "warn" else "STRICT"
                 print(f"  [{marker}] DUPLICATE — {result['message']}")
+            elif result.get("first_name_clash"):
+                print(f"  [WARN] FIRST NAME — {result['message']}")
             else:
                 print(f"  [OK] {result['message']}")
         return 1 if result["is_duplicate"] else 0
+
+    if args.cmd == "clashes":
+        found = all_first_name_clashes(args.campaign)
+        for npc, pcs in found:
+            print(f"  NPC {npc} shares a first name with PC {', '.join(pcs)}")
+        if not found:
+            print("  no NPC shares a first name with a player character")
+        return 1 if found else 0
 
     if args.cmd == "add":
         e = add(args.name, args.type, args.campaign, args.session)

@@ -492,5 +492,53 @@ class GraphSubcommandTests(unittest.TestCase):
         self.assertIn("must be one of", err)
 
 
+class GraphInitTests(unittest.TestCase):
+    """`init` exists, so the documented `/dm:dnd graph init` can run.
+
+    SKILL-commands.md calls graph init a hard requirement and says every
+    graph subcommand maps to `campaign_graph.py <subcommand>`, but there was
+    no `init` subcommand -- argparse rejected it with an error, so the first
+    step of the documented flow could not be taken.
+    """
+
+    setUp = GraphSubcommandTests.setUp
+    tearDown = GraphSubcommandTests.tearDown
+
+    def test_init_creates_an_empty_graph(self):
+        rc, out, err = _run(["init", "--campaign", self.campaign], env_overrides=self.env)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads((self.camp_dir / "graph.json").read_text(encoding="utf-8")),
+                         {"version": 1, "nodes": [], "edges": []})
+
+    def test_init_is_idempotent(self):
+        _run(["init", "--campaign", self.campaign], env_overrides=self.env)
+        rc, out, err = _run(["init", "--campaign", self.campaign], env_overrides=self.env)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("already initialized", out)
+
+    def test_init_never_overwrites_a_populated_graph(self):
+        _run(["add-node", "--campaign", self.campaign, "--type", "npc", "--name", "Aldric"],
+             env_overrides=self.env)
+        before = (self.camp_dir / "graph.json").read_text(encoding="utf-8")
+        rc, out, err = _run(["init", "--campaign", self.campaign], env_overrides=self.env)
+        self.assertEqual(rc, 1)
+        self.assertIn("not overwriting", err)
+        self.assertEqual((self.camp_dir / "graph.json").read_text(encoding="utf-8"), before)
+
+    def test_init_refuses_a_campaign_that_does_not_exist(self):
+        rc, out, err = _run(["init", "--campaign", self.campaign + "-typo"],
+                            env_overrides=self.env)
+        self.assertEqual(rc, 1)
+        self.assertFalse((self.root / "campaigns" / (self.campaign + "-typo")).exists())
+
+    def test_scene_context_after_init_still_reports_uninitialized(self):
+        # An empty graph is not a seeded one; the load flow keys off nodes.
+        _run(["init", "--campaign", self.campaign], env_overrides=self.env)
+        rc, out, err = _run(["scene-context", "--campaign", self.campaign, "--place", "x"],
+                            env_overrides=self.env)
+        self.assertEqual(rc, 0)
+        self.assertIn("graph not initialized", out)
+
+
 if __name__ == "__main__":
     unittest.main()

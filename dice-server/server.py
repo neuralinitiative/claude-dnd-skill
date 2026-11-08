@@ -12,7 +12,7 @@ Channels
 - physical=False or no subscribers on the target channel → server auto-rolls
   so play never deadlocks if a phone is closed.
 """
-import uuid, os, socket, queue, json, time, re, random
+import uuid, os, socket, queue, json, time, re, secrets
 from collections import defaultdict
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response
@@ -81,7 +81,9 @@ def parse_spec(spec: str):
 
 def server_side_roll(spec: str) -> dict:
     p = parse_spec(spec)
-    raw = [random.randint(1, p["sides"]) for _ in range(p["count"])]
+    # secrets, like the display's dice and dice_player.py: every die at the
+    # table comes from the same generator.
+    raw = [secrets.randbelow(p["sides"]) + 1 for _ in range(p["count"])]
     if p["keep_dir"]:
         s = sorted(raw, reverse=True)
         kept = s[: p["keep_n"]] if p["keep_dir"] == "h" else s[-p["keep_n"]:]

@@ -29,6 +29,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import unicodedata
 from collections import deque
 from typing import Optional
 from flask import Flask, Response, request, render_template, jsonify, send_from_directory
@@ -794,9 +795,17 @@ def _is_chrome(line: str) -> bool:
     if len(c) == 1 and not c.isalpha():
         return True
 
-    # Very short non-alpha fragments (≤3 chars with no letters = not narration)
-    if len(c) <= 3 and not re.search(r"[a-zA-Z]{2}", c):
-        return True
+    # Very short fragments with no word in them (≤3 chars) are escape-code
+    # residue, not narration. "A word" is decided per character with
+    # str.isalpha, not [a-zA-Z]: the ASCII test dropped 「好的」, 「はい。」,
+    # 「不。」, 「Да.」 and 「Нет」 while keeping "No.". Two letters make a word in
+    # any script; in a script without case (Han, Kana, Hangul) one letter is
+    # already a word -- 不 is "no".
+    if len(c) <= 3:
+        letters = [ch for ch in c if ch.isalpha()]
+        caseless_word = any(unicodedata.category(ch) == "Lo" for ch in letters)
+        if len(letters) < 2 and not caseless_word:
+            return True
 
     return False
 

@@ -121,6 +121,7 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
 4. Read SKILL-scripts.md (for script syntax this session)
 5. **Mark this campaign active** (for the autosave hook): write `{"name": "<campaign-name>"}` to `$(python3 ${CLAUDE_SKILL_DIR}/scripts/paths.py runtime-dir)/active-campaign.json`. This is what `autosave_checkpoint.py` reads to know which campaign to checkpoint; a stale marker is harmless. Then read state.md, world.md, npcs.md (index only), and all characters/*.md
    - **state.md contains `## DM Style Notes`** — read and internalize before narrating anything. These are table-specific calibration patterns that override default DM instincts.
+   - **state.md contains `## Glossary`** (tables playing in a language other than English) — use exactly these translations for game terms all session; add a line the first time a new term comes up.
    - **state.md contains `## Pinned Facts`** — read and keep hot for the whole session. These are stable soft facts the table has chosen never to forget (a promise made, a dead relative's name, a house rule, a running joke, a detail the player flagged as mattering). Unlike Live State Flags, they don't change turn-to-turn — they are standing canon. Weave them in when relevant and never contradict one; if a pinned fact is now wrong, correct it via `/dm:dnd pin` rather than silently overriding it. If the section reads *(none pinned yet)*, there's nothing to load.
    - **world.md:** Load in full — World Foundations, Three Truths, and factions inform narration and faction moves. Do NOT read `world-seeds.md` at load (generation artifact, not live reference).
    - **world-nodes.md (imported campaigns only):** Do **NOT** load at session start. It holds the full Quest Seed Bank and Adventure Nodes for the whole module; read only the current act's nodes on demand when a scene needs them. If the file is absent (dynamic/sandbox, or an older import), there is nothing to lazy-load — `world.md` already carries the nodes, unchanged from prior behavior.
@@ -214,7 +215,7 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
       ```
       Tell the DM the backup path explicitly so they can revert if needed.
 
-   3. **Run `/dm:dnd graph init <name>`** — propose seed nodes/edges from `npcs.md`, `world.md`, and `state.md` (Live State Flags + Active Quests + recent NPC dispositions). Show the DM a single approval block (counts by type + named entries) and ask for one go/no-go. After approval, batch-execute the `add-node` and `add-edge` calls. Use `--since N` matching when each node/edge first became canon (use `1` for foundational; the actual session number for newer NPCs/edges).
+   3. **Run `/dm:dnd graph init <name>`** — first `campaign_graph.py init --campaign <name>`, which creates the empty `graph.json` (idempotent, and it refuses to overwrite a graph that already has nodes or edges); then propose seed nodes/edges from `npcs.md`, `world.md`, and `state.md` (Live State Flags + Active Quests + recent NPC dispositions). Show the DM a single approval block (counts by type + named entries) and ask for one go/no-go. After approval, batch-execute the `add-node` and `add-edge` calls. Use `--since N` matching when each node/edge first became canon (use `1` for foundational; the actual session number for newer NPCs/edges).
 
    4. **Validate** with a `scene-context` query at the current location to confirm the subgraph is reachable.
 
@@ -246,12 +247,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>" --info
 ```
 **PDF sources:** extraction uses PyMuPDF (column-aware) so multi-column modules de-column into reading order and segment into chapters correctly — without it, two-column books collapse into one chapter. If the script prints a `pip3 install pymupdf` notice on its stderr, tell the DM to install it and re-run; it falls back to `pdftotext` otherwise but segmentation is less reliable.
 
-Print file info. If word count is over 4000, chunk the source:
+Print file info. If it reports more than one chunk, read it chunk by chunk (a chunk is ~4000 words of English or ~6000 characters of Chinese/Japanese/Korean, with the source's line breaks intact):
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>" --chunks  # total chunks
 python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>" --chunk 0  # first chunk
 ```
-For short sources (under 4000 words), read in full:
+For a single-chunk source, read in full:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/import_campaign.py "<filepath>"
 ```
@@ -561,7 +562,7 @@ Default to `Step by step` if the question is dismissed. Either path lands in the
 3. Ask: roll or point buy
    - Roll → `ability-scores.py roll`, present 3 arrays, player assigns
    - Point buy → `ability-scores.py pointbuy --check <scores>` to validate
-4. Run `character.py calc --race <race> [--subrace <subrace>]` with the BASE ability array. **It applies the racial bonuses itself** and prints base / race / final, along with every secondary stat — do not add racial bonuses by hand first, and do not omit `--race`. An unknown race exits non-zero rather than applying nothing, so a typo cannot produce a sheet quietly missing its bonuses. `lookup.py race <name>` has the full entry (bonuses, traits, speed, languages) if the player wants to read it.
+4. Run `character.py calc --race <race> [--subrace <subrace>]` with the BASE ability array. **It applies the racial bonuses itself** and prints base / race / final, along with every secondary stat — do not add racial bonuses by hand first, and do not omit `--race`. An unknown race exits non-zero rather than applying nothing, so a typo cannot produce a sheet quietly missing its bonuses. `lookup.py race <name>` has the full entry (bonuses, traits, speed, languages) if the player wants to read it. **In a 2024 campaign the increase comes from the background instead:** run `character.py calc --background <acolyte|criminal|sage|soldier> --background-asi STR=2,CON=1` (or `+1/+1/+1`) and no `--race`; it checks the increase is one the background allows and prints base / background / final. Add `--armor <srd-armor-index> [--shield]` (or `--armor none`) for the Armor Class.
 5. Ask: Fighting Style (Fighter/Paladin/Ranger), spells (if caster)
 6. Assign starting equipment per class + background
 7. Write to `characters/<name>.md` using `templates/character-sheet.md`; set `## Campaign History → Origin campaign`
@@ -612,7 +613,7 @@ Read `characters/<name>.md`, display cleanly. If name omitted and one character 
    |    |         | 20 | 355,000 |
 
    Insufficient XP → report deficit and stop. Only continue on explicit DM override.
-2. Read sheet. Run `character.py levelup`. Apply class features. Ask for HP roll or average. Update sheet + global roster. Narrate the growth.
+2. Read sheet. Run `character.py levelup --class <c> --from <n> --con-mod <m> [--con-mod-before <old>] [--subclass <s>] -c <campaign>`. It lists the **choices the new level owes** — an Ability Score Improvement, the subclass, Eldritch Invocations (by the SRD table), a Pact Boon, a Fighting Style — and the retroactive HP when the CON modifier rose; resolve every one with the player before writing the sheet. Apply class features. Ask for HP roll or average. Update sheet + global roster. Narrate the growth.
 
    **Ruleset-aware subclass timing (added 2026-05-08):** read campaign ruleset via `paths.campaign_ruleset(<campaign>)`.
    - **2014:** Subclass selection happens at the class's specified level (Cleric/Sorcerer/Warlock at 1; Druid/Wizard at 2; most others at 3).
@@ -656,11 +657,12 @@ Maps to: `python3 ${CLAUDE_SKILL_DIR}/scripts/name_registry.py <subcommand> [arg
 
 - `/dm:dnd registry rebuild [--include-prose]` — scan every campaign's `npcs.md`, `npcs-full.md`, `characters/*.md`, and `graph.json` (node names); rebuild the registry from canonical sources. Preserves any existing `retired_from` history. Run once on install, then ad hoc when desired.
 
-  **`--include-prose` (added 2026-05-07, opt-in):** also scan `session-log.md` and `session-log-archive.md` for capitalized 2–3-word sequences (likely-name patterns). Filtered against a stopword list (places, factions, mechanic words like "Theo Stealth", sentence starts) but **regex-based extraction is inherently noisy** — typically 5–15× more entries than canonical, with maybe 10–20% real catches. Tagged `source: prose` to distinguish; query with `/dm:dnd registry list --source prose` to manually review and prune. For high-quality prose extraction, the future move is LLM-backed (similar to `/dm:dnd graph extract`).
+  **`--include-prose` (added 2026-05-07, opt-in):** also scan `session-log.md` and `session-log-archive.md` for capitalized 2–3-word sequences (likely-name patterns) in any cased script — accented Latin, Cyrillic and Greek included — and, for Chinese, Japanese and Korean, which have no capitals, for a name directly followed by an honorific (田中さん, 李明先生, 민수씨). Filtered against a stopword list (places, factions, mechanic words like "Theo Stealth", sentence starts) but **regex-based extraction is inherently noisy** — typically 5–15× more entries than canonical, with maybe 10–20% real catches. Tagged `source: prose` to distinguish; query with `/dm:dnd registry list --source prose` to manually review and prune. For high-quality prose extraction, the future move is LLM-backed (similar to `/dm:dnd graph extract`).
 
 - `/dm:dnd registry list [--campaign C] [--type npc|pc] [--source canonical|prose]` — print all registry entries; filter by campaign-currently-active, type, or source.
 - `/dm:dnd registry lookup <name>` — case-insensitive lookup; prints the full entry as JSON.
-- `/dm:dnd registry check <name> [--json]` — check whether a proposed name collides with the registry. Exit 0 if unique, 1 if duplicate. Severity (`warn` default, `strict` opt-in via `<DND_CAMPAIGN_ROOT>/.name_registry_config.json`) controls whether duplicates are reported as warnings or hard refusals. Used by `/dm:dnd new`, `/dm:dnd character new`, `/dm:dnd npc <new>` procedures.
+- `/dm:dnd registry check <name> [--json]` — check whether a proposed name collides with the registry. Exit 0 if unique, 1 if duplicate. A name whose first name (titles like Lady / Sir / Captain stripped) matches a player character's is also flagged — "Lady Willa Torne" beside a PC "Willa Finch" — as a warning, exit 0; rename the NPC unless the echo is deliberate.
+- `/dm:dnd registry clashes [--campaign C]` — list every NPC that shares a first name with a player character; exit 1 if any. Severity (`warn` default, `strict` opt-in via `<DND_CAMPAIGN_ROOT>/.name_registry_config.json`) controls whether duplicates are reported as warnings or hard refusals. Used by `/dm:dnd new`, `/dm:dnd character new`, `/dm:dnd npc <new>` procedures.
 - `/dm:dnd registry add --name N --type npc|pc --campaign C --session N` — record a new entry manually (auto-called by `/dm:dnd npc rename` and the creation-time uniqueness hooks).
 - `/dm:dnd registry retire --name N --campaign C [--replaced-by NEW]` — mark a name as no longer active in a campaign (auto-called by `/dm:dnd npc rename`).
 
@@ -676,7 +678,7 @@ List all characters in global roster (`~/.claude/dnd/characters/`). Display: nam
 ---
 
 ## `/dm:dnd roll <notation>`
-Run `scripts/dice.py <notation>`. Display output verbatim. Examples: `d20`, `2d6+3`, `d20 adv`, `4d6kh3`.
+Run `scripts/dice.py <notation>`. Display output verbatim. Examples: `d20`, `2d6+3`, `d20 adv`, `4d6kh3`. For a d20, say what it is for with `--vs check|save|attack|death` (only an attack crits or fumbles) and add `--dc N` for a PASS/FAIL verdict.
 
 ---
 
@@ -697,7 +699,7 @@ Run `scripts/dice.py <notation>`. Display output verbatim. Examples: `d20`, `2d6
    ```
 5. Save STATE_JSON to `state.md` under `## Active Combat`.
 6. Step through turns using the per-turn sequence (in SKILL.md Active DM Mode).
-7. On combat end: update HP in character sheets, clear `## Active Combat`, `push_stats.py --turn-clear`, narrate aftermath, send XP summary, run `tracker.py -c <campaign> clear`.
+7. On combat end: update HP in character sheets, clear `## Active Combat`, `push_stats.py --turn-clear`, narrate aftermath, send XP summary, run `tracker.py -c <campaign> clear` (ends encounter conditions and round-long effects; minute/hour effects, exhaustion and petrification stay).
 
 **XP awards** go in the final display send:
 ```bash
@@ -715,17 +717,18 @@ DNDEND
 ---
 
 ## `/dm:dnd rest <short|long>`
+Rests run on in-game time. `calendar.py rest` advances the clock **and** the tracker's timed effects by the same hour or eight hours, so an 8-hour Mage Armor survives a short rest and is spent by a long one. Without a calendar, use `tracker.py -c <campaign> rest short|long` instead. Neither wipes effects — **do not run `tracker.py clear` for a rest**; it is for the end of an encounter.
+
 **Short (1 hour):**
-1. Ask how many Hit Dice the player spends. Roll `d[hit-die] + CON mod` per die via `dice.py`. Update HP, push `push_stats.py --player NAME --hp`.
+1. Ask how many Hit Dice the player spends. Resolve them with `character.py hitdie --die d<N> --con-mod <M> --hp <cur> --max-hp <max> --remaining <R> --count <K> -c <campaign>` — each die heals its roll + CON mod (never below 0 in 2014, 1 in 2024), HP stops at max, and it refuses a character at 0 HP or with no dice left. Update HP, push `push_stats.py --player NAME --hp`, and `--hit-dice-use` once per die.
 2. Note class features that recharge (e.g. Second Wind → `push_stats.py --player NAME --second-wind true`).
 3. Advance time: `calendar.py -c <campaign> rest short`
-4. Clear encounter conditions: `tracker.py -c <campaign> clear` (concentration may persist — ask)
 
 **Long (8 hours):**
-1. Restore all HP, half max Hit Dice (round up), all spell slots, most class features. Update sheet.
-2. Push: `push_stats.py --player NAME --hp <max> <max>` and `--second-wind true`.
-3. Advance time: `calendar.py -c <campaign> rest long`
-4. Clear all tracker state: `tracker.py -c <campaign> clear --all`
+1. **Life-state gate first.** A character at 0 HP — dying, stable or dead — gains **nothing** from a long rest; RAW it needs at least 1 HP. Do not restore their HP or dice; resolve how they regain consciousness first (a stable creature regains 1 HP after 1d4 hours).
+2. For everyone else: `character.py rest long --level <L> --hd-remaining <R> --hp <cur> --max-hp <max> [--exhaustion <E>] -c <campaign>` gives the numbers — full HP; Hit Dice regained equal to **half the character's total, rounded down, minimum 1** (2014) or **all spent dice** (2024); exhaustion **one level lower** (2014 also requires food and drink). Restore all spell slots and long-rest features. Update the sheet.
+3. Push: `push_stats.py --player NAME --hp <max> <max>`, `--hit-dice-restore <n>`, and `--second-wind true`.
+4. Advance time: `calendar.py -c <campaign> rest long` — this also ends every concentration (sleep is unconsciousness), lowers tracked exhaustion by one for anyone above 0 HP, and runs effects down by eight hours. It does **not** clear death saves or lasting conditions; reset a character's death saves with `tracker.py saves <name> reset` only once they have regained HP.
 5. Update `state.md` in-world date to match calendar output.
 
 ---
@@ -804,7 +807,7 @@ For background reading on the design and the A/B replay study that motivated it,
 All subcommands invoke `python3 ${CLAUDE_SKILL_DIR}/scripts/campaign_graph.py <subcommand> --campaign <name> [args]`.
 
 ### `/dm:dnd graph init [campaign-name]`
-First-time bootstrap. Read existing `npcs.md` / `world.md` / `state.md` for the campaign. Propose a node list (NPCs as `npc_*`, factions as `faction_*`, key locations as `place_*`) and a starter edge list (faction membership from npcs.md tables, NPC location from "Lives in / Based at" fields, faction relationships from world.md). Display the proposed list to the DM and **ask for approval** before writing — do not silently extract. After approval, run `add-node` and `add-edge` for each. Use `--since` matching state.md's current session count.
+First-time bootstrap. Run `campaign_graph.py init --campaign <name>` to create the empty `graph.json` — idempotent on an empty graph, and it refuses to overwrite one that already holds nodes or edges. Then read existing `npcs.md` / `world.md` / `state.md` for the campaign. Propose a node list (NPCs as `npc_*`, factions as `faction_*`, key locations as `place_*`) and a starter edge list (faction membership from npcs.md tables, NPC location from "Lives in / Based at" fields, faction relationships from world.md). Display the proposed list to the DM and **ask for approval** before writing — do not silently extract. After approval, run `add-node` and `add-edge` for each. Use `--since` matching state.md's current session count.
 
 For existing campaigns being initialized for the first time, the `/dm:dnd load` flow offers to back the campaign directory up first; honour that flow rather than running init from a cold prompt.
 

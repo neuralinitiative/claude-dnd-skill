@@ -11,6 +11,14 @@
 *Soft facts the DM always keeps — canon the table never wants forgotten. Read at every /dnd load alongside DM Style Notes and kept hot all session. Unlike Live State Flags (which track shifting state and are rewritten each save), pinned facts are stable and are only added or removed on request. Pin a promise made, a dead sibling's name, a running in-joke, a table house rule, a detail the player has said matters. Add/list/remove with `/dm:dnd pin`.*
 *(none pinned yet)*
 
+## DM Style Notes
+*Table-specific calibration: what lands for this party, what to lean into, what to avoid. Read at every /dnd load. A style request made mid-session is written here at once, replacing any earlier note it contradicts.*
+*(none yet)*
+
+## Glossary
+*One translation per game term, for a table playing in a language other than English. Settle each term the first time it comes up and keep it — e.g. `Prone — Derribado`, `Short Rest — Descanso corto`. Read at every /dnd load.*
+*(none yet)*
+
 ## World State
 - **In-world date:** <Day, Month, Year — canonical source; keep in sync above>
 - **Season:** <current season>  **Weather:** <current conditions>

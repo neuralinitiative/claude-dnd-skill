@@ -39,7 +39,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/dice.py d20+5 --label "Goblin attack"
 
 Then run the command. The Bash call will block while the player picks up the phone, sees the prompt, and casts; the result returns to you afterward. Without the verbal prompt the player won't know to look, and the call will sit waiting for ~3 minutes before timing out into an auto-roll.
 
-Flags nat 20 (CRITICAL HIT) and nat 1 (FUMBLE) automatically. If output contains `[auto]` the target's phone wasn't connected and the server rolled itself — no action needed, just narrate the result.
+**Say what a d20 is for.** `--vs check|save|attack|death` decides how a natural 20 or 1 is labelled: only `--vs attack` prints CRITICAL HIT / FUMBLE (and only those lines fire the display's crit flash); `--vs death` reports regaining 1 HP on a 20 and two failures on a 1; a check or save just notes the natural roll. Without `--vs` nothing is called a crit. `--dc N` appends `→ PASS` / `→ FAIL` by arithmetic (for an attack, N is the target's AC; a nat 20 hits and a nat 1 misses). `--effects <entity> -c <campaign>` adds the modifiers `tracker.py` holds for that entity on that kind of roll — Bless's +1d4 on an attack or save — and needs `--vs`:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dice.py d20+5 --vs save --dc 14 --label "DEX save vs Fireball"
+python3 ${CLAUDE_SKILL_DIR}/scripts/dice.py d20+6 --vs attack --dc 15 --effects "Piper" -c $CAMP
+```
+
+If output contains `[auto]` the target's phone wasn't connected and the server rolled itself — no action needed, just narrate the result.
 
 To force-skip the physical roller (e.g. high-volume NPC rolls you don't want to surface): `--auto` flag, or `DND_DICE_PHYSICAL=0 python3 ...`.
 
@@ -100,6 +107,16 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/combat.py tracker '<JSON>' <round_num>
 
 # Resolve a single attack
 python3 ${CLAUDE_SKILL_DIR}/scripts/combat.py attack --atk 4 --ac 15 --dmg 2d6+2
+
+# Target paralyzed or unconscious and within 5 ft: any hit is a critical hit
+python3 ${CLAUDE_SKILL_DIR}/scripts/combat.py attack --atk 4 --ac 15 --dmg 2d6+2 --crit
+
+# Add the attacker's tracked modifiers (Bless +1d4 to the attack roll)
+python3 ${CLAUDE_SKILL_DIR}/scripts/combat.py attack --atk 4 --ac 15 --dmg 2d6+2 --effects "Flerb" -c $CAMP
+
+# 2024 Topple: DC = 8 + attacker's ability mod + proficiency; the save uses the TARGET's CON save
+python3 ${CLAUDE_SKILL_DIR}/scripts/combat.py attack --atk 5 --ac 13 --dmg 1d8+3 \
+    --mastery topple --ability-mod 3 --prof 2 --target-con-save 1
 ```
 `init` outputs `STATE_JSON:` line — store in `state.md` under `## Active Combat` between turns.
 
@@ -112,8 +129,23 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/character.py calc --class fighter --level 1 
     STR=15 DEX=10 CON=15 INT=9 WIS=11 CHA=14 \
     --proficient STR CON Athletics Intimidation Perception Survival
 
-# Level-up HP and bonus calculation
-python3 ${CLAUDE_SKILL_DIR}/scripts/character.py levelup --class fighter --from 1 --hp-roll 7 --con-mod 2
+# 2024 rules: the background's ability increase (+2/+1 or +1/+1/+1 among its three abilities)
+python3 ${CLAUDE_SKILL_DIR}/scripts/character.py calc --class fighter --level 1 \
+    --background soldier --background-asi STR=2,CON=1 STR=15 DEX=13 CON=14 INT=8 WIS=12 CHA=10
+
+# Armor Class from the SRD armor record (+ shield, + Defense fighting style; --armor none for unarmored)
+python3 ${CLAUDE_SKILL_DIR}/scripts/character.py calc --class fighter ... --armor chain-mail --shield --fighting-style defense
+
+# Level-up HP and bonus calculation, plus the choices the level owes
+# (ASI, subclass, invocations, pact boon, fighting style, retroactive CON HP)
+python3 ${CLAUDE_SKILL_DIR}/scripts/character.py levelup --class fighter --from 1 --hp-roll 7 --con-mod 2 \
+    [--con-mod-before 1] [--subclass champion] [--ruleset 2014|2024]
+
+# Short rest: spend Hit Dice (refuses at 0 HP or with none left)
+python3 ${CLAUDE_SKILL_DIR}/scripts/character.py hitdie --die d10 --con-mod 2 --hp 9 --max-hp 20 --remaining 3 --count 2 -c $CAMP
+
+# Long rest: what it restores (nothing for a character at 0 HP)
+python3 ${CLAUDE_SKILL_DIR}/scripts/character.py rest long --level 5 --hd-remaining 1 --hp 9 --max-hp 38 --exhaustion 1 -c $CAMP
 
 # XP tracking
 python3 ${CLAUDE_SKILL_DIR}/scripts/character.py xp --level 1 --gained 150
@@ -263,7 +295,7 @@ If `check_input.py` returns output, prepend it to the player's terminal input wh
 - Long rest → restore HP, hit dice, spell slots, second wind; push `--world-time` with updated time
 - Any rest or time advance → push `--world-time`
 
-**Keep the clock honest.** The world clock is continuity, not decoration. Narrate consistently with the time you last pushed, and advance it *deliberately* when an action costs time — a brief exchange is a few minutes, a search or a shopping trip is longer, a rest or a journey longer still. Never let the time of day drift on its own or silently reset between scenes. If the clock and the fiction ever disagree, reconcile it to the truth with a fresh `--world-time` push rather than compounding the error; setting it *backward* to the correct time is fine and undoes nothing, since timed effects run on their own round/minute/hour durations in `tracker.py`, independent of the wall clock.
+**Keep the clock honest.** The world clock is continuity, not decoration. Narrate consistently with the time you last pushed, and advance it *deliberately* when an action costs time — a brief exchange is a few minutes, a search or a shopping trip is longer, a rest or a journey longer still. Never let the time of day drift on its own or silently reset between scenes. If the clock and the fiction ever disagree, reconcile it to the truth with a fresh `--world-time` push rather than compounding the error; setting it *backward* to the correct time is fine and undoes nothing. Timed effects in `tracker.py` run on in-game time, never the wall clock: they move when a turn ticks, when `tracker.py effect advance <time>` runs, and when `calendar.py advance` or `rest` moves the date — so advance the calendar for a journey or a rest and the effects follow.
 
 ---
 
@@ -280,11 +312,21 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect start "Ethros the
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect start "Ethros the 19th" "Hunter's Mark" indef
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect end   "Max of Thraxx" "Web"   # narrative end (broken/dispelled)
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect tick  "Max of Thraxx"         # call on actor's turn — decrements rounds, prints expiry
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect advance 90m                     # in-game time passes (90 / 90m / 8h / 10r) for everyone
+
+# Typed modifier: Bless adds +1d4 to attacks and saves; dice.py / combat.py --effects apply it
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP effect start "Piper" "Bless" 10r conc --mod +1d4 --on attack,save
+
+# Rests (when there is no calendar; calendar.py rest does this for you)
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP rest short   # +1 hour, effects keep running
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP rest long    # +8 hours, concentration ends, exhaustion -1
 
 # Conditions
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP condition add "Ethros the 19th" poisoned
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP condition remove "Ethros the 19th" poisoned
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP condition clear "Ethros the 19th"
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP condition add "Ethros the 19th" exhausted   # one more level (6 = death)
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP condition remove "Ethros the 19th" exhausted  # one level less
 
 # Concentration (auto-clears previous if switching spells)
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP concentrate "Max of Thraxx" "Bless"
@@ -299,11 +341,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP saves "Ethros the 19th" 
 # Status / clear
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP status
 python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP status "Ethros the 19th"
-python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP clear           # conditions + concentration + effects
-python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP clear --all     # also clears death saves
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP clear           # end of encounter: conditions + round-long effects
+python3 ${CLAUDE_SKILL_DIR}/scripts/tracker.py -c $CAMP clear --all     # also resets death saves (never a dead PC's)
 ```
 
-**When to run:** condition applied/removed; caster begins/loses concentration (immediately, not end of turn); PC drops to 0 HP; each death save rolled; end of encounter → `clear`.
+**When to run:** condition applied/removed; caster begins/loses concentration (immediately, not end of turn); PC drops to 0 HP; each death save rolled; end of encounter → `clear`. `clear` keeps minute/hour effects (Mage Armor outlasts the fight), exhaustion and petrification; it is not part of a rest.
 
 ---
 
@@ -322,6 +364,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/calendar.py -c $CAMP advance 8 hours
 python3 ${CLAUDE_SKILL_DIR}/scripts/calendar.py -c $CAMP advance 2 days
 python3 ${CLAUDE_SKILL_DIR}/scripts/calendar.py -c $CAMP rest short   # +1 hour
 python3 ${CLAUDE_SKILL_DIR}/scripts/calendar.py -c $CAMP rest long    # +8 hours
+# advance and rest also run tracker.py's timed effects down by the same time
 
 # Query / manual set
 python3 ${CLAUDE_SKILL_DIR}/scripts/calendar.py -c $CAMP now
@@ -453,6 +496,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py feature "sneak attack"
 python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py condition "poisoned"
 python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py monster "goblin"
 python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py monster "dragon" --all   # all fuzzy matches
+python3 ${CLAUDE_SKILL_DIR}/scripts/lookup.py invocation "agonizing blast"  # also fighting-style, pact-boon
 
 # Programmatic (used by display companion /srd-lookup endpoint):
 from lookup import lookup, lookup_record, lookup_with_level, suggest

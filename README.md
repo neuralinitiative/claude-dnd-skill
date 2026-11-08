@@ -76,7 +76,7 @@ If you're on Claude Code, you're in the right place.
 - <img src="skills/dnd/display/icons/spellbook.png" height="18"> **SRD spell/feature lookup** — click any spell or feature name in a character sheet to view its full description; bundled 5e dataset with supplemental entries for non-SRD content (Xanathar's, Tasha's, subclass features); wikidot fallback link shown for anything not in the local data
 - <img src="skills/dnd/display/icons/crystal_ball.png" height="18"> **DM Help button** — click the ◈ button on the display for an on-demand contextual hint or warning; generated from the current scene without per-turn token overhead
 - <img src="skills/dnd/display/icons/potion.png" height="18"> **Tutor / learning mode** — enable per-session for automatic hint blocks after every scene, decision point, and roll; ideal for players new to D&D
-- <img src="skills/dnd/display/icons/chat.png" height="18"> **Spoken narration** — tap the speaker on any narration block to hear it read aloud. With a Google AI Studio key in `GEMINI_API_KEY` it uses Gemini TTS; without one it falls back to the browser's own speech synthesis, so narration audio works with no key, no account setup and no cost. The fallback is not necessarily offline — Chrome and Edge synthesize their best voices on the vendor's servers — but nothing is configured, billed, or sent to Gemini
+- <img src="skills/dnd/display/icons/chat.png" height="18"> **Spoken narration** — tap the speaker on any narration block to hear it read aloud. With a Google AI Studio key in `GEMINI_API_KEY` it uses Gemini TTS, and each clip is cached on disk so replaying a block makes no second request; without one it falls back to the browser's own speech synthesis, so narration audio works with no key, no account setup and no cost. The fallback is not necessarily offline — Chrome and Edge synthesize their best voices on the vendor's servers — but nothing is configured, billed, or sent to Gemini
 - <img src="skills/dnd/display/icons/focus.png" height="18"> **Browser-side sound effects** — 12 SFX types synthesized on demand via numpy and played through Web Audio API; works on any device with the tab open, including phones over LAN
 - <img src="skills/dnd/display/icons/dragon.png" height="18"> **Couch co-op** — multiple characters, shared display, turn order visible to everyone in the room
 - <img src="skills/dnd/display/icons/attack.png" height="18"> **Combat tracker** — auto-rolled initiative, `▶` turn pointer, HP bars, inline dice math sent to display
@@ -266,7 +266,7 @@ The two arc types are mutually exclusive per campaign and fully compatible with 
 The creation flow walks through:
 1. Name, race, class, background
 2. **Point buy** (validates against 27-point budget) or **rolled** (3 arrays of 4d6kh3 to choose from)
-3. Racial bonuses applied by `character.py calc --race <race> [--subrace <subrace>]` — the script applies them and shows base / race / final, so the step is computed rather than remembered; an unknown race refuses instead of silently applying nothing
+3. Racial bonuses applied by `character.py calc --race <race> [--subrace <subrace>]` — the script applies them and shows base / race / final, so the step is computed rather than remembered; an unknown race refuses instead of silently applying nothing. In a 2024 campaign the increase comes from the background instead: `--background <name> --background-asi STR=2,CON=1` (or `+1/+1/+1`), checked against the background's three abilities
 4. Derived stats calculated from the boosted scores by the same call
 5. Starting equipment assigned by class + background
 6. Sheet written to `characters/<name>.md`
@@ -335,7 +335,7 @@ Every NPC gets: role, stat block, demeanor, motivation, secret, and a speech qui
 
 ```
 /dm:dnd rest short    # 1 hour — spend Hit Dice, recharge some features
-/dm:dnd rest long     # 8 hours — full HP, half Hit Dice back, all spell slots
+/dm:dnd rest long     # 8 hours — full HP, half your Hit Dice back (all in 2024), all spell slots; nothing for a character at 0 HP
 ```
 
 Long rests advance the in-world clock in `state.md`.
@@ -655,7 +655,12 @@ python3 scripts/dice.py 4d6kh3          # keep highest 3 (ability score roll)
 python3 scripts/dice.py d20 --silent    # integer only (for hidden rolls)
 ```
 
-Flags nat 20 (`CRITICAL HIT`) and nat 1 (`FUMBLE`) automatically.
+Say what a d20 is for with `--vs check|save|attack|death`: only an attack roll is labelled `CRITICAL HIT` / `FUMBLE`, a death save reports its own nat 20 / nat 1 rules, and a check or save just notes the natural roll. `--dc N` adds `PASS` / `FAIL`; `--effects <name> -c <campaign>` adds the modifiers `tracker.py` holds (Bless's +1d4).
+
+```bash
+python3 scripts/dice.py d20+5 --vs save --dc 14
+python3 scripts/dice.py d20+6 --vs attack --dc 15 --effects Aldric -c <campaign>
+```
 
 ### `ability-scores.py` — Character creation
 
@@ -680,6 +685,9 @@ python3 scripts/combat.py tracker '<state_json>' <round_num>
 
 # Resolve a single attack
 python3 scripts/combat.py attack --atk 5 --ac 13 --dmg 1d8+3
+
+# Paralyzed or unconscious target within 5 ft: any hit is a critical hit
+python3 scripts/combat.py attack --atk 5 --ac 13 --dmg 1d8+3 --crit
 ```
 
 `init` outputs a `STATE_JSON:` line — save this to `state.md` under `## Active Combat` for persistence between turns.
@@ -718,8 +726,18 @@ python3 scripts/character.py calc --class fighter --level 2 \
     STR=16 DEX=12 CON=15 INT=10 WIS=11 CHA=13 \
     --proficient STR CON Athletics Intimidation Perception Survival
 
-# Level-up
+# 2024 rules: the background's ability increase, validated against the background
+python3 scripts/character.py calc --class fighter --level 1 --background soldier \
+    --background-asi STR=2,CON=1 STR=15 DEX=13 CON=14 INT=8 WIS=12 CHA=10 \
+    --armor chain-mail --shield          # Armor Class from the SRD armor record
+
+# Level-up — also lists the choices the level owes (ASI, subclass, invocations,
+# pact boon, fighting style) and retroactive HP when CON rose
 python3 scripts/character.py levelup --class fighter --from 2 --hp-roll 8 --con-mod 2
+
+# Rests — Hit Dice spent on a short rest, what a long rest restores
+python3 scripts/character.py hitdie --die d10 --con-mod 2 --hp 9 --max-hp 20 --remaining 2
+python3 scripts/character.py rest long --level 2 --hd-remaining 0 --hp 9 --max-hp 20
 
 # XP tracking
 python3 scripts/character.py xp --level 2 --gained 150

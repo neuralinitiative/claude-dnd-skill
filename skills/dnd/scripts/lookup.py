@@ -76,10 +76,18 @@ CATEGORY_MAP = {
     "feature":     "features",
     "features":    "features",
     "feat":        "features",
+    "invocation":     "class_options",
+    "invocations":    "class_options",
+    "fighting-style": "class_options",
+    "fighting_style": "class_options",
+    "pact-boon":      "class_options",
+    "pact_boon":      "class_options",
+    "option":         "class_options",
+    "options":        "class_options",
 }
 
 ALL_CATEGORIES = ["spells", "equipment", "magic_items", "conditions", "monsters",
-                  "races", "subraces", "features"]
+                  "races", "subraces", "class_options", "features"]
 
 # ─── Data loading / index ─────────────────────────────────────────────────────
 
@@ -326,6 +334,16 @@ def _fmt_feature(r: dict) -> str:
     return "\n".join(lines)
 
 
+def _fmt_class_option(r: dict) -> str:
+    kind = r.get("kind", "").replace("_", " ").title()
+    head = f"## {r.get('name','?')}  [{r.get('class','')} {kind}, level {r.get('level','?')}]"
+    lines = [head]
+    if r.get("prerequisites"):
+        lines.append(f"Prerequisite: {', '.join(r['prerequisites'])}")
+    lines += ["", r.get("description", "")]
+    return "\n".join(lines)
+
+
 FORMATTERS = {
     "spells":      _fmt_spell,
     "equipment":   _fmt_equipment,
@@ -333,6 +351,7 @@ FORMATTERS = {
     "conditions":  _fmt_condition,
     "monsters":    _fmt_monster,
     "features":    _fmt_feature,
+    "class_options": _fmt_class_option,
 }
 
 
