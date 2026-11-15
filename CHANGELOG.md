@@ -11,6 +11,16 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 ## [Unreleased]
 
 ### Added
+- **Knowledge registry: NPCs only know what they have actually learned.** A new per-campaign `secrets.md`
+  (from `templates/secrets.md`) records who in the fiction knows each sensitive fact (and how and when they
+  learned it), who only suspects it, and who must not learn it. It also lists the cover stories
+  (disguises, shapechanges, aliases) that the world sees. A new gate rule in SKILL.md says that facts in the
+  campaign files are DM knowledge, not world knowledge. Before an NPC uses private information, the DM asks
+  how that character would know it, and a disguised PC is perceived as they appear. The registry is read at
+  load, updated live when a secret spreads, and swept at `/dm:dnd end` with an apply/pick/skip list. Companion
+  briefings are filtered through it. New commands: `secret init | add | reveal | who | check | list`
+  (`init` builds the registry for an existing campaign from its files). The procedures live in
+  `SKILL-secrets.md`, loaded only when a campaign uses the registry.
 - **Companions played by their own subagent.** An NPC who joins the party (`/dm:dnd companion add <name>`) is now
   played by a dedicated `companion` agent (`agents/companion.md`) that sees only the companion's sheet and what it
   perceives — never the DM's secrets. It answers with what it says, attempts, privately thinks, how its opinion
