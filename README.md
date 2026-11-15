@@ -329,6 +329,25 @@ How a player's own d20s (attacks, checks, saves, death saves) get rolled is chos
 
 Every NPC gets: role, stat block, demeanor, motivation, secret, and a speech quirk. Attitudes shift on a 5-step scale: `hostile → unfriendly → neutral → friendly → allied`. Changes are logged with reason and date in `npcs.md`.
 
+### Companions
+
+```
+/dm:dnd companion add Brisaile     # the NPC joins the party — gets its own sheet and its own subagent
+/dm:dnd companion status           # opinions of each PC, current personal goal, last memories
+/dm:dnd companion leave Brisaile   # the NPC leaves (or splits off for a while)
+/dm:dnd companion mode Brisaile dm # hand her back to the DM (sheet and journal kept)
+/dm:dnd companion off              # disable agent-played companions for this campaign
+```
+
+**Opt-in:** when an NPC joins the party, the DM asks the player whether it should become an autonomous
+companion. Nothing is promoted without the player's choice.
+
+An NPC who travels with the party is played by a dedicated **`companion` subagent** instead of the DM. The
+subagent only ever sees the companion's own sheet and what the companion perceives in each scene — never the
+DM's secrets — so it can misjudge, object, pursue its own goals and surprise the table. The DM still rolls and
+decides every outcome. Each companion keeps an opinion of every PC and a journal of what mattered to it, both
+persisted in `campaigns/<name>/companions/<Name>.md` across sessions.
+
 ---
 
 ## Resting
