@@ -21,6 +21,8 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
   autonomous companions; `companion mode <name> agent|dm` and a campaign-wide `companion on|off` switch.
   Companions level up with the party and choose their own ASI/feat and spells, in character.
   New commands: `companion add | leave | mode | status | ask | on | off`.
+  The procedure lives in `SKILL-companions.md`, loaded only when a campaign uses companions, so tables that
+  never opt in pay no extra context. The agent has no tools (`tools: []` plus an explicit `disallowedTools`).
 
 ## [2.7.0] — 2026-11-08 — Timed effects on in-game time, rests and rolls that follow the rules, 2024 backgrounds and level-up choices, and short replies that survive every script
 

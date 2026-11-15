@@ -332,10 +332,10 @@ Every NPC gets: role, stat block, demeanor, motivation, secret, and a speech qui
 ### Companions
 
 ```
-/dm:dnd companion add Brisaile     # the NPC joins the party — gets its own sheet and its own subagent
+/dm:dnd companion add Osk          # the NPC joins the party — gets its own sheet and its own subagent
 /dm:dnd companion status           # opinions of each PC, current personal goal, last memories
-/dm:dnd companion leave Brisaile   # the NPC leaves (or splits off for a while)
-/dm:dnd companion mode Brisaile dm # hand her back to the DM (sheet and journal kept)
+/dm:dnd companion leave Osk        # the NPC leaves (or splits off for a while)
+/dm:dnd companion mode Osk dm      # hand it back to the DM (sheet and journal kept)
 /dm:dnd companion off              # disable agent-played companions for this campaign
 ```
 

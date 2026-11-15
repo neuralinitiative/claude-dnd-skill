@@ -159,6 +159,7 @@ ${CLAUDE_SKILL_DIR}/                 ← the skill dir (plugin: <plugin>/skills/
   SKILL.md           ← core DM rules (this file)
   SKILL-scripts.md   ← all Python script syntax (load at session start)
   SKILL-commands.md  ← all /dm:dnd command procedures (load at session start)
+  SKILL-companions.md ← opt-in agent-played companions (load only when used — see Companions)
   scripts/           ← dice.py, combat.py, character.py, tracker.py, calendar.py, lookup.py
   data/              ← bundled 5e SRD dataset (dnd5e_srd.json — no download needed; sync via /dm:dnd data sync)
   templates/         ← blank character-sheet.md, state.md, world.md, npcs.md, session-log.md, companion.md
@@ -426,90 +427,13 @@ Step (g) uses `push_stats.py --turn-current` directly because it has no narratio
 
 ---
 
-## Companions — NPCs who travel with the party
+## Companions (opt-in)
 
-An NPC who **joins the party** (travels, fights and camps with the PCs) can become a *companion* played by
-its own **`companion` subagent** instead of by you. **This is opt-in, per NPC, and the player decides.**
-
-**Opt-in rules:**
-- Never make an NPC an agent-played companion on your own. When an NPC joins the party in fiction (or the
-  player asks), call `AskUserQuestion`: *"<Name> rejoint le groupe — en faire un vrai compagnon, joué par son
-  propre agent ?"* with options `Oui — compagnon autonome` / `Non — le MJ le joue comme avant`. Only on *Oui*
-  run `/dm:dnd companion add <name>`. On *Non*, nothing changes: the NPC stays a normal NPC you play.
-- An NPC that joins without the player having been asked is a normal NPC. The player can promote it at any
-  time with `/dm:dnd companion add <name>`, or hand it back to you with `/dm:dnd companion mode <name> dm`.
-- Campaign switch `companion_agents: on | off` in `state.md → ## Session Flags` (absent = `on`). When `off`,
-  never ask, never spawn — every companion is voiced by you from its sheet. Toggle with `/dm:dnd companion on|off`.
-- Each sheet carries `**Mode:** agent | dm`. Only `agent` companions get a subagent; `dm` companions keep
-  their sheet, opinion table and journal (you update them yourself) but you play them.
-
-Each agent-played companion is played by its own subagent, not by you. You remain the DM — you run the world, every roll and
-every outcome — but the companion decides what *it* wants, says and attempts. Because the subagent only
-ever sees the companion's own sheet and what the companion perceives, it cannot metagame your secrets: it
-can be wrong, suspicious, loyal for its own reasons, or surprising. That independence is the point.
-
-**Files:** `campaigns/<name>/companions/<Slug>.md`, from `templates/companion.md`, written from the
-companion's point of view (what they know and believe — not the DM's truth). The NPC keeps its row in
-`npcs.md` (Attitude column → `companion`) and its full DM entry in `npcs-full.md`, which is where hidden
-truths stay. Create/retire companions with `/dm:dnd companion add|leave`; switch who plays them with `/dm:dnd companion mode`.
-
-**Spawning.** The first time a companion is needed in a session, call the `Agent` tool with
-`subagent_type: "companion"` (when installed as the plugin it may be listed as `dm:companion`), a short
-`description` like `"Brisaile — compagnon"`, and a prompt containing, in this order: the full companion sheet,
-a one-paragraph *"what you know of the last days"* bridge built from `## Current Situation` filtered to what the
-companion witnessed or was told, then the first briefing. Remember the returned agent id/name for the rest of
-the session and continue that same agent with `SendMessage` for every later call — it keeps its own memory of
-the session, so later briefings carry only what changed. (Load `SendMessage` via ToolSearch if it is deferred.
-If it is unavailable, spawn fresh each time with sheet + last 5 journal lines + briefing.)
-If no `companion` agent type is listed (standalone skill install), spawn `general-purpose` and prepend the
-body of `${CLAUDE_SKILL_DIR}/../../agents/companion.md` (or, for a standalone copy, ask the player to install
-the plugin) — and say in the prompt that it must not read any files.
-
-**Briefing format** (in the table's language):
-```
-TRIGGER: addressed | decision | combat-turn | aftermath | downtime | agenda
-SCENE (what <Name> perceives): <where, who is present, what is visible/audible — 2–5 lines>
-JUST HAPPENED: <the PCs' words/actions this turn and any outcome <Name> saw>
-[OPTIONS: <combat only — positions, visible enemies and their state, the companion's own HP/slots>]
-```
-Never put information in a briefing that the companion could not perceive: hidden rolls, an NPC's real
-motive, what lies behind the door. If the companion was elsewhere, it does not learn what happened until
-someone tells it in fiction.
-
-**When to call the companion (triggers):**
-- **addressed** — a PC speaks to the companion, asks its opinion, or gives it an order.
-- **decision** — the party is about to make a choice the companion would have a stake in (a deal, a mercy,
-  a betrayal, a route, a reward split). Call *before* narrating the outcome, so the companion can object.
-- **combat-turn** — on the companion's initiative slot. Its reply picks action and target; you roll and resolve
-  with the normal scripts.
-- **aftermath** — after an event that would move the companion: a death, a revelation touching its past, a PC
-  doing the thing it values or can't stand.
-- **downtime** — rests, campfires, arrivals in town, long travel: let it start a conversation, push its own
-  thread, or wander off to do something.
-- **agenda** — if none of the above fired for ~5 player turns or since the last scene change, send a short
-  agenda tick (`TRIGGER: agenda` + scene) so the companion can act unprompted. If it answers `SAYS: —` and
-  `DOES: —`, keep going.
-
-Do **not** call it for a one-word acknowledgement or pure background presence — voice that yourself from the
-sheet. Normally at most one companion call per player turn (combat-turn calls excepted); with several
-companions, send the briefings in parallel in the same response.
-
-**Using the reply:**
-- **SAYS / DOES / BODY** → weave into your narration in the companion's voice. You may trim for pace, never
-  change intent. Send its line to the display with `send.py --npc "<Name>"` like any NPC dialogue.
-- **DOES** is an *attempt*. Adjudicate it like any action: roll if failure would change the scene, apply the
-  rules, narrate the real outcome — even when it disappoints the companion. If it would break the scene or a
-  rule, narrate the attempt failing or being interrupted in fiction; don't silently drop it. Tell the companion
-  the outcome in the next briefing.
-- **THINKS** is private. Never narrate it verbatim; let it leak through subtext, hesitation, a look — or
-  through Insight checks a PC makes on the companion.
-- **OPINION** → apply each delta to the companion's opinion table at the next save (cap ±10). Crossing the
-  `I leave if` condition is real: play the departure (or betrayal) out in fiction, then `/dm:dnd companion leave`.
-- **WANTS NEXT** → treat as a promise the companion made to itself; it should surface in play within a session
-  or two, through a downtime/agenda trigger.
-- **REMEMBER** → append to the sheet's `## Journal` at the next save.
-
-**The companion never speaks for a PC and never decides outcomes.** If a reply does either, ignore that part.
+An NPC who joins the party can become a *companion* played by its own `companion` subagent — **only if the
+player chooses it**. Read `${CLAUDE_SKILL_DIR}/SKILL-companions.md` (once per session) when any of these is true:
+the campaign has a `companions/` folder with an `active` sheet; an NPC joins the party in fiction (to ask the
+player whether it should become a companion — unless `companion_agents: off` in `## Session Flags`); or a
+`/dm:dnd companion …` command is used. Otherwise ignore companions entirely.
 
 ---
 
