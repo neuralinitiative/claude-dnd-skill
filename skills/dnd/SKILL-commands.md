@@ -128,6 +128,7 @@ Full step-by-step procedures for all `/dm:dnd` slash commands. Load this file at
    - **arc.md (imported campaigns only):** Do **NOT** load at session start. `state.md → ## Campaign Arc` already carries the current + next chapter window. Read `arc.md` only when advancing chapters or when a player asks about the broader arc. If absent, the arc lives inline in `state.md` (dynamic/sandbox) — read it there as before. **Sanity-check the pointer at load:** if `## Campaign Arc`'s `current_chapter` shows its `outstanding_beats` already cleared, or the last session plainly ended in the *next* chapter's location or situation, the pointer never advanced — surface it (*"the current chapter looks finished; pick up in `<next_chapter>`?"*) instead of opening another scene in a chapter that's already done. A pointer that never moves is exactly how a structured campaign quietly drifts off its own arc and starts improvising.
    - **source/<chapter-id>.md (imported campaigns only):** the full module text, one file per chapter. Never loaded at session start. Before running a scene in a chapter, read that chapter's `source/<id>.md` (the `source_ref` in the arc) — and only that chapter. This is the predefined-story equivalent of reading a single NPC's full entry on demand.
    - **npcs.md:** Index row only at load. **Before writing substantive dialogue or decisions for any named NPC, read their full entry in `npcs-full.md`.** Do not wait for an explicit `/dm:dnd npc [name]` call — do it proactively when a scene centers on that character. Index rows carry surface traits only; personality axes, relationships, and hidden goals are in the full entry.
+   - **companions/*.md** (if the folder exists and any sheet is `**Status:** active`): read `${CLAUDE_SKILL_DIR}/SKILL-companions.md` and follow its *At load* step.
    - **Do NOT read session-log.md at load** — recent events are already in `state.md → ## Recent Events`. Only read session-log.md if the player explicitly requests a recap, or if DM Calibration from the last 1-2 sessions is needed and not already internalized.
 6. Push full party stats to display sidebar. **CRITICAL:** use `--json` with a complete player object — **never** the `--player` shorthand here. `--player` only updates existing fields; it cannot populate the card or sheet tabs. The display shows "Full sheet not loaded" when `sheet` is absent.
 
@@ -447,6 +448,7 @@ If `graph.json` doesn't exist yet for this campaign, skip the sweep entirely (no
         - **Did not land — pressure absorbed without consequence** → the beat is overdue and its current shape no longer fits. **Run `/dm:dnd arc revise` immediately**; do not just update `steering_notes`. The beat's `what_changes` was event-shaped (something specific happens) when it should be consequence-shaped (something fundamentally different is true) — revise both `what_changes` and `world_pressure` to fit a path that DOES land. The committed shape bends; it does not break.
         - **Pressure not yet delivered** → leave beat alone; expected to deliver next session.
       iv. Update `steering_notes` for the next outstanding beat with the *consequence shape* expected, not the specific event.
+   e2. **Companions** (only if a companion subagent was spawned this session): run the *At end* step of `SKILL-companions.md`.
    f. **Tail verification (added 2026-05-01):** before killing the display, verify the campaign-side `session_tail.json` is healthy:
       ```bash
       bash ${CLAUDE_SKILL_DIR}/display/verify_tail.sh <campaign-name>
@@ -633,6 +635,9 @@ Read `characters/<name>.md`, display cleanly. If name omitted and one character 
 
 ## `/dm:dnd npc attitude <name> <shift>`
 Find NPC in npcs.md, shift attitude one step (hostile → unfriendly → neutral → friendly → allied), log reason and date.
+
+## `/dm:dnd companion <add|leave|mode|status|ask|on|off> [name] [...]`
+Opt-in NPC companions played by their own subagent. Full procedure: read `${CLAUDE_SKILL_DIR}/SKILL-companions.md`.
 
 ## `/dm:dnd npc rename "Old Name" <"New Name" | random> [flags]`
 Rename a character across an entire campaign — `npcs.md`, `npcs-full.md`, `state.md` (every section), `session-log.md`, `graph.json` (node + edges preserved), and `characters/<slug>.md` if `--type pc`. Backs up the campaign first.

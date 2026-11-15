@@ -159,11 +159,12 @@ ${CLAUDE_SKILL_DIR}/                 ← the skill dir (plugin: <plugin>/skills/
   SKILL.md           ← core DM rules (this file)
   SKILL-scripts.md   ← all Python script syntax (load at session start)
   SKILL-commands.md  ← all /dm:dnd command procedures (load at session start)
+  SKILL-companions.md ← opt-in agent-played companions (load only when used — see Companions)
   scripts/           ← dice.py, combat.py, character.py, tracker.py, calendar.py, lookup.py
   data/              ← bundled 5e SRD dataset (dnd5e_srd.json — no download needed; sync via /dm:dnd data sync)
-  templates/         ← blank character-sheet.md, state.md, world.md, npcs.md, session-log.md
+  templates/         ← blank character-sheet.md, state.md, world.md, npcs.md, session-log.md, companion.md
   display/           ← Flask SSE display companion (dnd-display-app.py, send.py, push_stats.py, wrapper.py, tts.py)
-(plugin root, one level up: docs/ setup walkthroughs · dice-server/ optional physical-dice service)
+(plugin root, two levels up: agents/companion.md — the companion subagent · docs/ setup walkthroughs · dice-server/ optional physical-dice service)
 ```
 
 **Player data** lives under the DATA root — `~/.claude/dnd/` by default, or
@@ -173,6 +174,7 @@ inside the plugin (so it survives updates/uninstalls):
 ```
 <DATA root>/campaigns/<name>/
   state.md / world.md / npcs.md / session-log.md / characters/<name>.md
+  companions/<name>.md   ← one sheet per NPC travelling with the party (played by the `companion` subagent)
 <DATA root>/characters/
   <name>.md          ← global roster: latest known state of every PC across all campaigns
 ```
@@ -422,6 +424,16 @@ g. push_stats.py --turn-current  ← advance turn pointer (still separate — no
 Step (f) is the most commonly missed. Every narration block must be sent.
 Step (g) uses `push_stats.py --turn-current` directly because it has no narration to bundle with.
 `tracker.py effect tick` is the headless fallback — it fires regardless of whether the display is running.
+
+---
+
+## Companions (opt-in)
+
+An NPC who joins the party can become a *companion* played by its own `companion` subagent — **only if the
+player chooses it**. Read `${CLAUDE_SKILL_DIR}/SKILL-companions.md` (once per session) when any of these is true:
+the campaign has a `companions/` folder with an `active` sheet; an NPC joins the party in fiction (to ask the
+player whether it should become a companion — unless `companion_agents: off` in `## Session Flags`); or a
+`/dm:dnd companion …` command is used. Otherwise ignore companions entirely.
 
 ---
 

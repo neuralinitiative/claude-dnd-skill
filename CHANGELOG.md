@@ -10,6 +10,20 @@ Versions before **1.6.0** are reconstructed retroactively from git history; the 
 
 ## [Unreleased]
 
+### Added
+- **Companions played by their own subagent.** An NPC who joins the party (`/dm:dnd companion add <name>`) is now
+  played by a dedicated `companion` agent (`agents/companion.md`) that sees only the companion's sheet and what it
+  perceives — never the DM's secrets. It answers with what it says, attempts, privately thinks, how its opinion
+  of each PC moved and what it wants next; the DM keeps every roll and outcome. Triggers (addressed, decision,
+  combat turn, aftermath, downtime, and an agenda tick every few turns) let companions act unprompted. Per-campaign
+  sheets in `companions/<Name>.md` carry an opinion table and a journal across sessions, refreshed by an
+  end-of-session reflection. Strictly opt-in: the player chooses, NPC by NPC, which ones become
+  autonomous companions; `companion mode <name> agent|dm` and a campaign-wide `companion on|off` switch.
+  Companions level up with the party and choose their own ASI/feat and spells, in character.
+  New commands: `companion add | leave | mode | status | ask | on | off`.
+  The procedure lives in `SKILL-companions.md`, loaded only when a campaign uses companions, so tables that
+  never opt in pay no extra context. The agent has no tools (`tools: []` plus an explicit `disallowedTools`).
+
 ## [2.7.0] — 2026-11-08 — Timed effects on in-game time, rests and rolls that follow the rules, 2024 backgrounds and level-up choices, and short replies that survive every script
 
 Twenty changes in one release, so an existing install updates once and receives
