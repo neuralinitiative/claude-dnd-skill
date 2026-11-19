@@ -353,15 +353,17 @@ persisted in `campaigns/<name>/companions/<Name>.md` across sessions.
 ### Knowledge registry — who knows what
 
 ```
-/dm:dnd secret init                       # build the registry for an existing campaign from its files
+/dm:dnd secret init                       # start a registry: asks about PC secrets and private plans
 /dm:dnd secret reveal osk-past to Mira    # Mira now knows (this session, "told")
-/dm:dnd secret check Mira                 # what Mira knows, suspects, and which cover stories she sees
+/dm:dnd secret brief Mira,Osk             # what is hidden from the people in this scene, and their cover
 ```
 
 The DM knows every secret, but the world doesn't. `campaigns/<name>/secrets.md` records who in the fiction
-knows each sensitive fact (and how they learned it), who only suspects it, and which cover stories
-(disguises, shapechanges, aliases) the world sees instead. Before an NPC uses private information, the DM
-checks how that character would know it. A changeling in human form is treated as a human, and a deal made
+knows each sensitive fact (and how they learned it), who only suspects it, and the **cover** everyone else
+perceives (a disguise, a shapechange, an alias). At load and whenever a scene's cast changes, the DM runs a
+scene brief (`secret_registry.py brief --present …`): it lists every secret someone present doesn't know,
+with the cover they see. Before an NPC uses private information, the DM checks how that character would
+know it. A changeling in human form is treated as a human, and a deal made
 by letter in another city stays unknown to whoever wasn't told. The registry is updated when a secret spreads
 and reviewed at `/dm:dnd end`.
 

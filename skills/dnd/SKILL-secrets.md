@@ -5,8 +5,11 @@ applies; this file holds the procedures for the registry file `campaigns/<name>/
 
 You know everything in the campaign files. The world does not. Facts in `state.md`, `npcs-full.md`, character
 sheets and session logs are **DM knowledge**, not world knowledge: a fact being written down never means an
-NPC knows it. The registry records, for each sensitive piece of information, which characters in the fiction
-actually know it, and how they learned it.
+NPC knows it. Leaks rarely come from missing information; they come from having *too much* of it in context
+when an NPC speaks. So the registry does two jobs:
+- it records which characters in the fiction actually know each sensitive fact, and how they learned it;
+- through the scene brief, it puts the **cover story** (what an NPC perceives) in front of you at the moment
+  the scene's cast is set.
 
 Typical leaks it prevents:
 - a disguised or shapechanged PC (a changeling in human form, an alias, a hidden patron) whom NPCs treat
@@ -17,30 +20,43 @@ Typical leaks it prevents:
 
 ## The file
 
-`campaigns/<name>/secrets.md`, from `${CLAUDE_SKILL_DIR}/templates/secrets.md`. Written in the table's
-language. Two parts:
-- **Cover stories**: what the world sees instead of the truth. An NPC who isn't in the matching entry's
-  *Known by* perceives only the cover.
-- **Secrets**: one entry per piece of information, with *Truth*, *Known by* (name, session, how), *Suspected
-  by*, *Must not learn it*, *If revealed*.
+`campaigns/<name>/secrets.md`, from `${CLAUDE_SKILL_DIR}/templates/secrets.md`. Field labels stay in English
+(the brief script reads them); content is written in the table's language. One entry per piece of
+information:
+- *Truth*: the information itself;
+- *Cover*: what those who don't know perceive instead;
+- *Known by*: name, session and how they learned it;
+- *Suspected by*, *Must not learn it*, *If revealed*.
 
-What deserves an entry: anything whose spread would change how an NPC acts. That covers:
+What deserves an entry is anything whose spread would change how an NPC acts:
 - PC secrets (true identity or nature, a hidden past, a patron, a curse);
 - private party plans and deals;
 - arrangements made at a distance (letters, envoys, a representative at a trial);
-- an NPC's hidden motive or allegiance;
+- an NPC's hidden motive or allegiance, once someone besides that NPC knows it;
 - quest truths the party has uncovered;
 - anything the player asks to keep hidden.
 
-Not every fact needs one: public events, what everyone in town saw, and things nobody would hide stay out.
+Public events, what everyone in town saw, and things nobody would hide stay out. An NPC's own `Secret:` in
+`npcs-full.md` doesn't need an entry while that NPC is the only one who knows it.
 
-## At load
+## The scene brief
 
-If `secrets.md` exists, read it in full at `/dm:dnd load` (it is the gate's data, so it must be in context
-before any NPC speaks). Keep it short: entries in *Revealed / public* can be trimmed to one line.
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/secret_registry.py brief --campaign <name> --present "<NPC>,<NPC>,<companion>"
+```
 
-If it doesn't exist and the campaign already has sessions, offer once (in the table's language) to build it
-with `/dm:dnd secret init`. If the player declines, the gate rule in SKILL.md still applies from memory.
+For every active entry, it prints the characters present who do **not** know it, with the cover they
+perceive. It also prints who only suspects it, and who must not learn it along with what happens if they
+do. List every named NPC and companion in the scene; PCs can be left out unless a PC secret is hidden from
+another PC.
+
+Run it:
+- **at load**, for the scene the session opens on, next to `graph scene-context`;
+- **every time the cast of a scene changes**: a new location, an NPC joining or leaving the conversation,
+  the start of a social scene.
+
+Keep its output in mind for the whole scene, and voice those NPCs through the cover. If the script prints
+nothing to flag, nothing present is hidden from anyone.
 
 ## The gate: checking before an NPC speaks
 
@@ -50,7 +66,7 @@ private even if not yet registered, answer one question: **how would this charac
 1. **Listed in *Known by*** → it knows; it acts on it in character (it may still choose to hide that it knows).
 2. **Listed in *Suspected by*** → hints, probing questions, a wary look, a wrong guess. Never a flat statement
    of the truth.
-3. **Not listed** → it doesn't know. It acts on the cover story and on what it can perceive right now.
+3. **Not listed** → it doesn't know. It acts on the *Cover* and on what it can perceive right now.
 4. **Not listed, but a plausible path exists** (an informant, a spy network, a scrying, a gossiping servant,
    a letter that passed through its hands) → don't assume it. Decide in the open:
    - roll for it if it's uncertain (`dice.py --silent`, or an oracle check);
@@ -79,7 +95,7 @@ continuity micro-save:
 - **Guessed** → add to *Suspected by* with what they suspect and why.
 - **Now common knowledge** → move the entry to *Revealed / public* with the session and how it got out.
 - **New sensitive fact** (a PC adopts a disguise, the party makes a private plan, a deal is struck in secret)
-  → add an entry with *Known by* = those present.
+  → add an entry with *Known by* = those present, and its *Cover*.
 
 ## Companions
 
@@ -100,26 +116,30 @@ Present the batch as a numbered list, one line each (`+ Dace → Known by: valdr
 and ask: *apply all / pick / skip*. Never write proposals silently. If `secrets.md` doesn't exist, skip this
 step unless the session created a secret worth registering; in that case offer `secret init`.
 
-## `/dm:dnd secret <init|add|reveal|who|check|list> [...]`
+## `/dm:dnd secret <init|add|reveal|brief|list> [...]`
 
-- **`init`**: build `secrets.md` for an existing campaign. Read the following:
-  - `characters/*.md`, for PC secrets, disguises, aliases and hidden pasts;
-  - `npcs-full.md` (`Secret:` fields and hidden goals);
-  - `state.md` (`## Live State Flags`, `## Current Situation`, `## Recent Events`, `## Continuity Archive`,
-    faction moves);
-  - `session-log.md` / `recent-events-archive.md` as needed.
+- **`init`**: create `secrets.md` for a campaign that doesn't have one yet. Copy the template, then ask the
+  player (`AskUserQuestion`, in the table's language):
+  - whether any PC has a secret identity or nature, a hidden past, a patron or an allegiance, and what the
+    world sees instead (*Cover*);
+  - whether the party is keeping any plan, deal or arrangement private.
   
-  For each sensitive fact, work out who in the fiction learned it, and when and how, from the logs. When the
-  logs don't say, put the NPC in *Suspected by* or leave them out, and mark the line `(?)`. Never guess
-  someone into *Known by*. Show the draft to the player, apply their corrections, then write the file.
-- **`add <id> "<truth>" [known:<A,B>] [kind:<k>]`**: new entry. *Known by* defaults to the PCs present.
+  For each answer, read the matching PC sheet (`characters/<PC>.md`) and `state.md → ## Live State Flags` /
+  `## Current Situation`, and draft the entry with *Known by* = those the player names. Never guess anyone
+  into *Known by*; if unsure, ask or leave them out. Don't seed entries from `Secret:` fields and don't mine
+  the session logs. Show the draft, apply the player's corrections, then write the file. Later entries are
+  added live as play reveals them.
+- **`add <id> "<truth>" [cover:"<cover>"] [known:<A,B>] [kind:<k>]`**: new entry. *Known by* defaults to the
+  PCs present.
 - **`reveal <id> to <A,B> [how]`**: add them to *Known by* (the current session and `how`, default `told`).
   `reveal <id> public [how]` moves it to *Revealed / public*.
-- **`who <id>`**: list *Known by*, *Suspected by* and *Must not learn it* for one entry. Out of character.
-- **`check <npc> [topic]`**: out of character. List what the NPC knows, suspects, and must not learn, and
-  which cover stories it sees. Run it before a big scene with that NPC.
-- **`list`**: every entry id and label, with a count of who knows it.
+- **`brief [<names>]`**: run the scene brief for the given names, or for the current scene's cast, and show
+  it out of character.
+- **`list`**: `secret_registry.py list`, giving every active entry id and label with how many know it.
 
 A `pc` entry belongs to that PC's player. At a table with several players, other PCs may not know it either:
-list them in *Known by* like anyone else, and don't print a `pc` entry's *Truth* in `who`, `check` or `list`
-output unless its player asked.
+list them in *Known by* like anyone else, and don't show a `pc` entry's *Truth* to the table unless its player
+asked.
+
+**Import:** at `/dm:dnd import` (gap-fill wizard) and at `/dm:dnd character new`, ask the same PC question as
+`init`. If any PC has a secret, create `secrets.md` (or add to it) with those entries.

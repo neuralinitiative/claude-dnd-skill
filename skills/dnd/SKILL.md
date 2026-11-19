@@ -442,11 +442,11 @@ player whether it should become a companion — unless `companion_agents: off` i
 
 ## Knowledge Registry
 
-`campaigns/<name>/secrets.md` records who **in the fiction** knows each sensitive fact, and which cover
-stories (disguises, aliases) the world sees. When it exists, read it in full at load: it is the data behind the
-"an NPC knows only what it has learned" rule. Read `${CLAUDE_SKILL_DIR}/SKILL-secrets.md` (once per session)
-when the campaign has a `secrets.md`, when a secret is revealed or created in play, or when a `/dm:dnd secret …`
-command is used.
+`campaigns/<name>/secrets.md` records who **in the fiction** knows each sensitive fact, and the cover story
+(disguise, alias) everyone else perceives. When it exists, run `secret_registry.py brief --present <cast>` at
+load and **whenever the cast of a scene changes**, and voice the NPCs it flags through their cover. Read
+`${CLAUDE_SKILL_DIR}/SKILL-secrets.md` (once per session) when the campaign has a `secrets.md`, when a secret
+is revealed or created in play, or when a `/dm:dnd secret …` command is used.
 
 ---
 
