@@ -67,7 +67,8 @@ JUST HAPPENED: <the PCs' words/actions this turn and any outcome <Name> saw>
 
 Never put information in a briefing that the companion could not perceive: hidden rolls, an NPC's real
 motive, what lies behind the door. If the companion was elsewhere, it does not learn what happened until
-someone tells it in fiction.
+someone tells it in fiction. If the campaign has a `secrets.md`, filter each briefing through it: a registered
+secret goes in only if the companion is in its *Known by* (as a suspicion only if it is in *Suspected by*).
 
 ## When to call the companion (triggers)
 

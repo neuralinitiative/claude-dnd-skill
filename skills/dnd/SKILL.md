@@ -160,6 +160,7 @@ ${CLAUDE_SKILL_DIR}/                 ← the skill dir (plugin: <plugin>/skills/
   SKILL-scripts.md   ← all Python script syntax (load at session start)
   SKILL-commands.md  ← all /dm:dnd command procedures (load at session start)
   SKILL-companions.md ← opt-in agent-played companions (load only when used — see Companions)
+  SKILL-secrets.md   ← knowledge registry procedures (load only when used — see Knowledge Registry)
   scripts/           ← dice.py, combat.py, character.py, tracker.py, calendar.py, lookup.py
   data/              ← bundled 5e SRD dataset (dnd5e_srd.json — no download needed; sync via /dm:dnd data sync)
   templates/         ← blank character-sheet.md, state.md, world.md, npcs.md, session-log.md, companion.md
@@ -175,6 +176,7 @@ inside the plugin (so it survives updates/uninstalls):
 <DATA root>/campaigns/<name>/
   state.md / world.md / npcs.md / session-log.md / characters/<name>.md
   companions/<name>.md   ← one sheet per NPC travelling with the party (played by the `companion` subagent)
+  secrets.md             ← knowledge registry: who in the fiction knows each secret (DM-only)
 <DATA root>/characters/
   <name>.md          ← global roster: latest known state of every PC across all campaigns
 ```
@@ -218,6 +220,7 @@ Once a campaign is loaded, stay in DM mode. Interpret all player messages as in-
 - **One word per game term.** At a table playing in a language other than English, settle one translation for each game term — a condition, a spell, a class feature, a faction, a place — the first time it comes up, and keep it. A term that drifts between two words reads to the player as two different things. Record each choice in `state.md → ## Glossary` and read it at load.
 - **Level and XP come from the record, not from memory.** Answer "what level am I / how much XP do I have" from the character file and `xp.py check`, and never say a sheet was updated unless you wrote it this turn.
 - **Before applying damage or loot, check it isn't already recorded.** Read the sheet or `state.md` first — especially after a context compaction, when the turn that already applied it may survive only as a summary, and applying it again doubles it.
+- **An NPC knows only what it has seen, been told or could plausibly have learned — not what the DM knows.** Facts in the campaign files are DM knowledge. Before an NPC states, uses or reacts to private information (a PC's true nature under a disguise, a plan made in private, an arrangement made by letter elsewhere), ask *how would this character know?* A disguised PC is perceived as they appear. If there is no path in the fiction, the NPC doesn't know. If a path is only plausible, decide it in the open and record it before playing it. See *Knowledge Registry*.
 - **Before writing substantive dialogue or decisions for any named NPC**, read their full entry in `npcs-full.md` if one exists. The index row in `npcs.md` carries surface traits only — personality axes, relationships, hidden goals, and speech quirks are in the full entry and will drift without it. Do this proactively when a scene centers on that NPC, not only when `/dm:dnd npc [name]` is called explicitly.
 - **Before any recap, status summary, or claim about faction standing, player cover, or NPC disposition — re-read the source, not the compacted context.** After context compaction, the DM's impression is a lossy summary of summaries and must not be trusted for specific facts. Re-read the *smallest section that covers the claim* — do not load full files when a targeted section suffices:
   - **First stop:** `state.md → ## Live State Flags` — cover, faction stances, NPC dispositions in compact key-value form. Read this section alone for most recap claims; it is designed to answer them without a full file load.
@@ -434,6 +437,16 @@ player chooses it**. Read `${CLAUDE_SKILL_DIR}/SKILL-companions.md` (once per se
 the campaign has a `companions/` folder with an `active` sheet; an NPC joins the party in fiction (to ask the
 player whether it should become a companion — unless `companion_agents: off` in `## Session Flags`); or a
 `/dm:dnd companion …` command is used. Otherwise ignore companions entirely.
+
+---
+
+## Knowledge Registry
+
+`campaigns/<name>/secrets.md` records who **in the fiction** knows each sensitive fact, and the cover story
+(disguise, alias) everyone else perceives. When it exists, run `secret_registry.py brief --present <cast>` at
+load and **whenever the cast of a scene changes**, and voice the NPCs it flags through their cover. Read
+`${CLAUDE_SKILL_DIR}/SKILL-secrets.md` (once per session) when the campaign has a `secrets.md`, when a secret
+is revealed or created in play, or when a `/dm:dnd secret …` command is used.
 
 ---
 
