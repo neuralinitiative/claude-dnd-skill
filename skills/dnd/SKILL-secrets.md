@@ -112,7 +112,7 @@ registered live:
 - disguises used or seen through;
 - private plans made.
 
-Present the batch as a numbered list, one line each (`+ Dace → Known by: valdrin-advocate (S9, network (Zhentarim))`)
+Present the batch as a numbered list, one line each (`+ Orrin → Known by: envoy-letter (S9, network (thieves' guild))`)
 and ask: *apply all / pick / skip*. Never write proposals silently. If `secrets.md` doesn't exist, skip this
 step unless the session created a secret worth registering; in that case offer `secret init`.
 

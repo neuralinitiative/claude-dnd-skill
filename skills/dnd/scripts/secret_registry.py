@@ -8,7 +8,7 @@ whenever the cast of a scene changes, so the cover is in front of the DM at the
 moment an NPC speaks.
 
 Usage:
-  python3 secret_registry.py brief --campaign <name> --present "Dace Morlenne,Brisaile"
+  python3 secret_registry.py brief --campaign <name> --present "Orrin Vale,the innkeeper"
   python3 secret_registry.py brief --campaign <name> --all     # every active entry
   python3 secret_registry.py list  --campaign <name>
   (--file PATH instead of --campaign reads a registry directly)
@@ -28,8 +28,8 @@ secrets.md format (field labels stay in English; content in the table's language
   ## Revealed / public      <- entries here are common knowledge and skipped
 
 Names match loosely: case, accents and punctuation are ignored, and a shorter
-name matches a longer one when all its words appear in it ("Dace" matches
-"Dace Morlenne").
+name matches a longer one when all its words appear in it ("Orrin" matches
+"Orrin Vale").
 """
 from __future__ import annotations
 

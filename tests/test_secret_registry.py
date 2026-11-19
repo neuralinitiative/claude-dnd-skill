@@ -33,23 +33,23 @@ REGISTRY = textwrap.dedent("""\
     ### kael-changeling — Kael is a changeling
     - **Kind:** pc
     - **Truth:** Kael is a changeling who keeps a human form in public.
-    - **Cover:** a human woman named Mara, a scribe from Waterdeep
-    - **Known by:** Kael (S1, self) · Brisaile (S2, saw her shift)
-    - **Suspected by:** Dace Morlenne (S4, saw her face flicker, Insight 18)
-    - **Must not learn it:** Ser Garrick, the Order
+    - **Cover:** a human woman named Mara, a travelling scribe
+    - **Known by:** Kael (S1, self) · Ilsa (S2, saw her shift)
+    - **Suspected by:** Orrin Vale (S4, saw her face flicker, Insight 18)
+    - **Must not learn it:** Captain Hale, the Order
     - **If revealed:** the Order hunts her
 
-    ### valdrin-advocate — Valdrin speaks for Héonn at the trial
+    ### envoy-letter — Éloise speaks for the party at the hearing
     - **Kind:** party
-    - **Truth:** Valdrin's letter names him Héonn's representative at the Kolbrenn trial.
+    - **Truth:** A letter sent ahead names Éloise the party's representative at the hearing in the capital.
     - **Cover:** *none*
-    - **Known by:** Héonn (S8, told), Valdrin (S8, wrote it), the court clerk (S9, document)
+    - **Known by:** Kael (S8, told), Éloise (S8, wrote it), the court clerk (S9, document)
     - **Suspected by:** *none*
     - **Must not learn it:** none
 
     ## Revealed / public
 
-    ### heonn-warforged — Héonn is a warforged
+    ### guild-patron — The party works for the guild
     - **Known by:** everyone
 """)
 
@@ -59,17 +59,17 @@ class ParseTests(unittest.TestCase):
         self.entries = sr.parse(REGISTRY)
 
     def test_placeholder_and_revealed_entries_are_skipped(self):
-        self.assertEqual([e["id"] for e in self.entries], ["kael-changeling", "valdrin-advocate"])
+        self.assertEqual([e["id"] for e in self.entries], ["kael-changeling", "envoy-letter"])
 
     def test_fields_and_people(self):
         kael = self.entries[0]
         self.assertEqual(kael["label"], "Kael is a changeling")
-        self.assertEqual(kael["cover"], "a human woman named Mara, a scribe from Waterdeep")
-        self.assertEqual([n for n, _ in kael["known_people"]], ["Kael", "Brisaile"])
+        self.assertEqual(kael["cover"], "a human woman named Mara, a travelling scribe")
+        self.assertEqual([n for n, _ in kael["known_people"]], ["Kael", "Ilsa"])
         # a comma inside parentheses stays with its person
         self.assertEqual(kael["suspected_people"],
-                         [("Dace Morlenne", "(S4, saw her face flicker, Insight 18)")])
-        self.assertEqual([n for n, _ in kael["forbidden_people"]], ["Ser Garrick", "the Order"])
+                         [("Orrin Vale", "(S4, saw her face flicker, Insight 18)")])
+        self.assertEqual([n for n, _ in kael["forbidden_people"]], ["Captain Hale", "the Order"])
 
     def test_none_values_are_empty(self):
         self.assertEqual(self.entries[1]["suspected_people"], [])
@@ -78,13 +78,13 @@ class ParseTests(unittest.TestCase):
 
 class NameMatchTests(unittest.TestCase):
     def test_short_name_matches_full_name(self):
-        self.assertTrue(sr.names_match("Dace", "Dace Morlenne"))
+        self.assertTrue(sr.names_match("Orrin", "Orrin Vale"))
 
     def test_accents_and_case_are_ignored(self):
-        self.assertTrue(sr.names_match("heonn", "Héonn"))
+        self.assertTrue(sr.names_match("eloise", "Éloise"))
 
     def test_shared_title_is_not_a_match(self):
-        self.assertFalse(sr.names_match("Ser Elouan", "Ser Garrick"))
+        self.assertFalse(sr.names_match("Captain Brand", "Captain Hale"))
 
 
 class BriefTests(unittest.TestCase):
@@ -92,28 +92,28 @@ class BriefTests(unittest.TestCase):
         self.entries = sr.parse(REGISTRY)
 
     def test_unaware_npc_gets_the_cover(self):
-        out = sr.brief(self.entries, ["Ser Garrick"])
+        out = sr.brief(self.entries, ["Captain Hale"])
         self.assertIn("kael-changeling", out)
         self.assertIn("COVER (what they perceive): a human woman named Mara", out)
-        self.assertIn("Does NOT know: Ser Garrick", out)
-        self.assertIn("MUST NOT LEARN IT: Ser Garrick — if revealed: the Order hunts her", out)
+        self.assertIn("Does NOT know: Captain Hale", out)
+        self.assertIn("MUST NOT LEARN IT: Captain Hale — if revealed: the Order hunts her", out)
 
     def test_distant_arrangement_is_flagged_for_a_stranger(self):
-        out = sr.brief(self.entries, ["Dace"])
-        self.assertIn("valdrin-advocate", out)
-        self.assertRegex(out, r"valdrin-advocate[^\n]*\n(?:  [^\n]*\n)*  Does NOT know: Dace")
+        out = sr.brief(self.entries, ["Orrin"])
+        self.assertIn("envoy-letter", out)
+        self.assertRegex(out, r"envoy-letter[^\n]*\n(?:  [^\n]*\n)*  Does NOT know: Orrin")
 
     def test_suspicion_stays_a_hint(self):
-        out = sr.brief(self.entries, ["Dace"])
-        self.assertIn("Only suspects (hints, never a flat statement): Dace (S4,", out)
+        out = sr.brief(self.entries, ["Orrin"])
+        self.assertIn("Only suspects (hints, never a flat statement): Orrin (S4,", out)
 
     def test_nothing_to_flag_when_everyone_present_knows(self):
-        out = sr.brief(self.entries, ["Brisaile", "Kael"])
+        out = sr.brief(self.entries, ["Ilsa", "Kael"])
         self.assertNotIn("kael-changeling", out)
 
     def test_all_known_says_so(self):
         entries = [e for e in self.entries if e["id"] == "kael-changeling"]
-        out = sr.brief(entries, ["Brisaile"])
+        out = sr.brief(entries, ["Ilsa"])
         self.assertIn("No registered secret is hidden", out)
 
 
@@ -128,9 +128,9 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = pathlib.Path(d) / "secrets.md"
             p.write_text(REGISTRY, encoding="utf-8")
-            code, out = self._run("brief", "--file", str(p), "--present", "Ser Garrick")
+            code, out = self._run("brief", "--file", str(p), "--present", "Captain Hale")
         self.assertEqual(code, 0)
-        self.assertIn("Does NOT know: Ser Garrick", out)
+        self.assertIn("Does NOT know: Captain Hale", out)
 
     def test_missing_registry_is_not_an_error(self):
         with tempfile.TemporaryDirectory() as d:
